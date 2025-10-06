@@ -1,5 +1,6 @@
 ﻿using iText.Kernel.Pdf;
 using iText.Kernel.Pdf.Canvas.Parser;
+using Microsoft.Extensions.Configuration;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -8,6 +9,7 @@ class Config
 {
   public string PdfFolder { get; set; } = "";
   public string OutputOperazioni { get; set; } = "";
+  public Dictionary<string, string> Descrizioni { get; set; } = new Dictionary<string, string>();
 }
 
 public class Operazione
@@ -16,50 +18,92 @@ public class Operazione
   public string Tipo { get; set; } = "";
   public string Descrizione { get; set; } = "";
   public decimal Importo { get; set; }
+  public decimal ImportoRossella { get; set; }
+  public decimal ImportoLuca { get; set; }
+  public bool IsContabilizzato { get; set; }
+
+  public override string ToString()
+  {
+    string s = "";
+    s += $"{this.Data:yyyy-MM-dd};";
+    s += $"\"{this.Tipo}\";";
+    s += $"\"{this.Descrizione}\";";
+    s += $"{this.ImportoRossella.ToString(CultureInfo.CurrentCulture)};";
+    s += $"{this.ImportoLuca.ToString(CultureInfo.CurrentCulture)};";
+    s += $"{this.Importo.ToString(CultureInfo.CurrentCulture)};";
+    s += $"{this.IsContabilizzato:\"S\":\"N\"}";
+    return s;
+  }
 }
 
 class Program
 {
   static void Main()
   {
-    var config = CaricaConfigurazione("appsettings.json");
+    // Costruisco la configuration leggendo appsettings.json
+    var configuration = new ConfigurationBuilder()
+        .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+        .Build();
+    var appConfig = configuration.Get<Config>();
+    // Binding diretto su un Dictionary
+    var mySettings = configuration.GetSection("Descrizione").Get<Dictionary<string, string>>();
     var operazioni = new List<Operazione>();
     var pdfMovimentiExtractor = new PdfMovimentiExtractor();
-    foreach (var file in Directory.GetFiles(config.PdfFolder, "*.pdf"))
+    foreach (var file in Directory.GetFiles(appConfig.PdfFolder, "*.pdf"))
     {
       FileInfo fileInfo = new FileInfo(file);
       switch (fileInfo.Name.Replace(".pdf", "").ToLower())
       {
-        case "tr":
-        case "trade_repubblic":
-        case "traderepubblic":
+        case string s when s.StartsWith("tr"):
+        case string s1 when s1.StartsWith("trade_repubblic"):
+        case string s2 when s2.StartsWith("traderepubblic"):
           operazioni.AddRange(pdfMovimentiExtractor.EstraiMovimentiFromTr(fileInfo.FullName));
           break;
-        case "ing":
+        case string s when s.StartsWith("ing"):
+        case string s1 when s1.StartsWith("ing direct"):
+        case string s2 when s2.StartsWith("ingdirect"):
+        case string s3 when s3.StartsWith("ing_direct"):
           operazioni.AddRange(pdfMovimentiExtractor.EstraiMovimentiFromIng(fileInfo.FullName));
           break;
       }
     }
+    var operazioniDefinitive = new List<Operazione>();
+    foreach (var op in operazioni)
+    {
+      if (op.Importo > 0)
+      {
+        continue;
+      }
+      Operazione newOperazione = new Operazione();
+      newOperazione.Data = op.Data;
+      newOperazione.Tipo = op.Tipo;
+      newOperazione.Importo = Math.Abs(op.Importo);
+      newOperazione.ImportoRossella = newOperazione.Importo / 2 * -1;
+      newOperazione.ImportoLuca = newOperazione.Importo / 2;
+      newOperazione.Descrizione = op.Descrizione;
+      foreach (var item in appConfig.Descrizioni)
+      {
+        if (op.Descrizione.ToLower().Contains(item.Key))
+        {
+          newOperazione.Descrizione = item.Value;
+          break;
+        }
+      }
+      operazioniDefinitive.Add(newOperazione);
+    }
 
     // CSV operazioni
-    using (var sw = new StreamWriter(config.OutputOperazioni))
+    using (var sw = new StreamWriter(appConfig.OutputOperazioni))
     {
-      sw.WriteLine("Data;Tipo;Descrizione;Importo");
-      foreach (var op in operazioni)
+      sw.WriteLine("Data;Tipo;Descrizione;Rossella;Luca;Importo;Contabilizzato");
+      foreach (var op in operazioniDefinitive)
       {
-        sw.WriteLine($"{op.Data:yyyy-MM-dd};\"{op.Tipo}\";\"{op.Descrizione}\";{op.Importo.ToString(CultureInfo.CurrentCulture)}");
+        sw.WriteLine($"{op.ToString()}");
       }
     }
 
-    Console.WriteLine($"File CSV creato - {config.OutputOperazioni}");
+    Console.WriteLine($"File CSV creato - {appConfig.OutputOperazioni}");
     Console.ReadLine();
-  }
-
-  static Config CaricaConfigurazione(string path)
-  {
-    if (!File.Exists(path)) return new Config();
-    var json = File.ReadAllText(path);
-    return JsonSerializer.Deserialize<Config>(json) ?? new Config();
   }
 }
 
@@ -129,7 +173,8 @@ public class PdfMovimentiExtractor
         Data = new DateTime(anno, mese, giorno),
         Descrizione = descrizione,
         Tipo = tipoTransazione,
-        Importo = importo
+        Importo = importo,
+        IsContabilizzato = false
       });
     }
 
@@ -211,6 +256,7 @@ public class PdfMovimentiExtractor
                   Tipo = tipo,
                   Descrizione = descrizione,
                   Importo = uscita,
+                  IsContabilizzato = false
                 });
               }
             }
