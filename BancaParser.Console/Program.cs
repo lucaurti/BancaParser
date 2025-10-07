@@ -1,13 +1,15 @@
-﻿using iText.Kernel.Pdf;
+﻿using ClosedXML.Excel;
+using iText.Kernel.Pdf;
 using iText.Kernel.Pdf.Canvas.Parser;
 using Microsoft.Extensions.Configuration;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
 class Config
 {
-  public string PdfFolder { get; set; } = "";
+  public string folderFiles { get; set; } = "";
   public string OutputOperazioni { get; set; } = "";
   public Dictionary<string, string> Descrizioni { get; set; } = new Dictionary<string, string>();
 }
@@ -49,10 +51,13 @@ class Program
     var mySettings = configuration.GetSection("Descrizione").Get<Dictionary<string, string>>();
     var operazioni = new List<Operazione>();
     var pdfMovimentiExtractor = new PdfMovimentiExtractor();
-    foreach (var file in Directory.GetFiles(appConfig.PdfFolder, "*.pdf"))
+    var files = Directory.GetFiles(appConfig.folderFiles, "*.pdf").ToList();
+    files.AddRange(Directory.GetFiles(appConfig.folderFiles, "*.xlsx"));
+
+    foreach (var file in files)
     {
       FileInfo fileInfo = new FileInfo(file);
-      switch (fileInfo.Name.Replace(".pdf", "").ToLower())
+      switch (fileInfo.Name.Replace(fileInfo.Extension, "").ToLower())
       {
         case string s when s.StartsWith("tr"):
         case string s1 when s1.StartsWith("trade_repubblic"):
@@ -64,6 +69,9 @@ class Program
         case string s2 when s2.StartsWith("ingdirect"):
         case string s3 when s3.StartsWith("ing_direct"):
           operazioni.AddRange(pdfMovimentiExtractor.EstraiMovimentiFromIng(fileInfo.FullName));
+          break;
+        case string s when s.StartsWith("bpm"):
+          operazioni.AddRange(pdfMovimentiExtractor.EstraiMovimentiFromBpm(fileInfo.FullName));
           break;
       }
     }
@@ -271,8 +279,43 @@ public class PdfMovimentiExtractor
   private decimal ParseDecimal(string s)
   {
     if (string.IsNullOrWhiteSpace(s)) return 0;
-    s = s.Replace(".", "").Replace(",", ".");
-    return decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d) ? d : 0;
+    s = s.Replace(".", "").Replace(",", ".").Replace("\"","");
+    decimal dd = decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d) ? d : 0;
+    return dd;
+  }
+
+  public List<Operazione> EstraiMovimentiFromBpm(string fullName)
+  {
+    using (var workbook = new XLWorkbook(fullName))
+    {
+      var worksheet = workbook.Worksheet(1);
+      List<List<string>> list = new List<List<string>>();
+      foreach (var row in worksheet.RowsUsed())
+      {
+        var values = row.Cells().Select(c =>
+        {
+          string v = c.GetValue<string>();
+          if (v.Contains(",") || v.Contains("\""))
+            v = $"\"{v.Replace("\"", "\"\"")}\"";
+          return v;
+        }).ToList();
+        list.Add(values);
+      }
+      var results = new List<Operazione>();
+      for (int i = 1; i < list.Count; i++)
+      {
+        results.Add(new Operazione
+        {
+          Data = Convert.ToDateTime(list[i][0]),
+          Descrizione = list[i][4],
+          Tipo = "",
+          Importo = ParseDecimal(list[i][2]),
+          IsContabilizzato = true
+        });
+
+      }
+      return results;
+    }
   }
 
   // mesi italiani
