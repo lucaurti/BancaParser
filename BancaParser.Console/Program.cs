@@ -53,6 +53,7 @@ class Program
     var pdfMovimentiExtractor = new PdfMovimentiExtractor();
     var files = Directory.GetFiles(appConfig.folderFiles, "*.pdf").ToList();
     files.AddRange(Directory.GetFiles(appConfig.folderFiles, "*.xlsx"));
+    files.AddRange(Directory.GetFiles(appConfig.folderFiles, "*.csv"));
 
     foreach (var file in files)
     {
@@ -73,6 +74,12 @@ class Program
         case string s when s.StartsWith("bpm"):
           operazioni.AddRange(pdfMovimentiExtractor.EstraiMovimentiFromBpm(fileInfo.FullName));
           break;
+        case string s when s.StartsWith("hype"):
+          operazioni.AddRange(pdfMovimentiExtractor.EstraiMovimentiFromHype(fileInfo.FullName));
+          break;
+        case string s when s.StartsWith("splitwise"):
+          operazioni.AddRange(pdfMovimentiExtractor.EstraiMovimentiFromSplitwise(fileInfo.FullName));
+          break;
       }
     }
     var operazioniDefinitive = new List<Operazione>();
@@ -88,6 +95,11 @@ class Program
       newOperazione.Importo = Math.Abs(op.Importo);
       newOperazione.ImportoRossella = newOperazione.Importo / 2 * -1;
       newOperazione.ImportoLuca = newOperazione.Importo / 2;
+      if (op.IsContabilizzato)
+      {
+        newOperazione.ImportoRossella = 0;
+        newOperazione.ImportoLuca = 0;
+      }      
       newOperazione.Descrizione = op.Descrizione;
       foreach (var item in appConfig.Descrizioni)
       {
@@ -316,6 +328,48 @@ public class PdfMovimentiExtractor
       }
       return results;
     }
+  }
+
+  public List<Operazione> EstraiMovimentiFromHype(string fullName)
+  {
+    var results = new List<Operazione>();
+    List<string> rows = File.ReadAllLines(fullName).ToList();
+    for (int i = 1; i < rows.Count; i++)
+    {
+      List<string> columns = rows[i].Split(",").ToList();
+      results.Add(new Operazione
+      {
+        Data = Convert.ToDateTime(columns[0]),
+        Descrizione = columns[5],
+        Tipo = columns[3],
+        Importo = ParseDecimal(columns[6]),
+        IsContabilizzato = false
+      });
+    }
+    return results;
+  }
+
+  public List<Operazione> EstraiMovimentiFromSplitwise(string fullName)
+  {
+    var results = new List<Operazione>();
+    List<string> rows = File.ReadAllLines(fullName).ToList();
+    for (int i = 1; i < rows.Count; i++)
+    {
+      if (string.IsNullOrWhiteSpace(rows[i]))
+      {
+        continue;
+      }
+      List<string> columns = rows[i].Split(",").ToList();
+      results.Add(new Operazione
+      {
+        Data = Convert.ToDateTime(columns[0]),
+        Descrizione = columns[1],
+        Tipo = "",
+        Importo = ParseDecimal(columns[6].Replace(".",","))*-1,
+        IsContabilizzato = false
+      });
+    }
+    return results;
   }
 
   // mesi italiani
