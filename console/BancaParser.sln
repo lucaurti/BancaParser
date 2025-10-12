@@ -4,6 +4,10 @@ VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BancaParser.Console", "BancaParser.Console\BancaParser.Console.csproj", "{A507CA06-6B00-F0DB-E343-C00F4CACD115}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BancaParser.Core", "BancaParser.Core\BancaParser.Core.csproj", "{2826F221-CDED-4558-A69C-ADAE7C37006B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BancaParser.Host", "BancaParser.Host\BancaParser.Host.csproj", "{BB933391-15ED-4D83-A4C4-915E3B7A8C11}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -14,6 +18,14 @@ Global
 		{A507CA06-6B00-F0DB-E343-C00F4CACD115}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A507CA06-6B00-F0DB-E343-C00F4CACD115}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A507CA06-6B00-F0DB-E343-C00F4CACD115}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2826F221-CDED-4558-A69C-ADAE7C37006B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2826F221-CDED-4558-A69C-ADAE7C37006B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2826F221-CDED-4558-A69C-ADAE7C37006B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2826F221-CDED-4558-A69C-ADAE7C37006B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BB933391-15ED-4D83-A4C4-915E3B7A8C11}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BB933391-15ED-4D83-A4C4-915E3B7A8C11}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BB933391-15ED-4D83-A4C4-915E3B7A8C11}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BB933391-15ED-4D83-A4C4-915E3B7A8C11}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
