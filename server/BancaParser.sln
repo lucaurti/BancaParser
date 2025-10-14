@@ -6,7 +6,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BancaParser.Console", "Banc
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BancaParser.Core", "BancaParser.Core\BancaParser.Core.csproj", "{2826F221-CDED-4558-A69C-ADAE7C37006B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BancaParser.Host", "BancaParser.Host\BancaParser.Host.csproj", "{BB933391-15ED-4D83-A4C4-915E3B7A8C11}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BancaParser.ApiHost", "BancaParser.ApiHost\BancaParser.ApiHost.csproj", "{BB933391-15ED-4D83-A4C4-915E3B7A8C11}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

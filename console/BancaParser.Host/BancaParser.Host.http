@@ -1,6 +1,0 @@
-@BancaParser.Host_HostAddress = http://localhost:5245
-
-GET {{BancaParser.Host_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###
