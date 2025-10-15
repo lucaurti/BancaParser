@@ -15,7 +15,7 @@ namespace BancaParser.Host.Controllers
       _configuration = new Config();
     }
 
-    [HttpPost]
+    [HttpPost("GeneraResoconto")]
     public IActionResult GeneraResoconto() 
     {
       try
@@ -32,9 +32,9 @@ namespace BancaParser.Host.Controllers
         pdfMovimentiExtractor.ExportToCsv(pathCsv, operazioniDefinitive);
         return Ok();
       }
-      catch (Exception)
+      catch (Exception ex)
       {
-        return BadRequest();
+        return StatusCode(500, new { error = ex.Message, stack = ex.StackTrace });
       }
     }
   }

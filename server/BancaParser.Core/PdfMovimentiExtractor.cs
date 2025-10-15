@@ -141,7 +141,7 @@ namespace BancaParser.Core
         int giorno = int.Parse(dataGiornoMeseImportoTipoList[0]);
         int mese = Array.IndexOf(Months, dataGiornoMeseImportoTipoList[1]) + 1;
         int anno = int.Parse(annoTipoTransazioneList[0]);
-        decimal importo = decimal.Parse(dataGiornoMeseImportoTipoList[3]);
+        decimal importo = ParseDecimal(dataGiornoMeseImportoTipoList[3]);
         string tipoTransazione = dataGiornoMeseImportoTipoList[2];
         for (int j = 1; j < annoTipoTransazioneList.Count; j++)
         {
@@ -297,12 +297,13 @@ namespace BancaParser.Core
       for (int i = 1; i < rows.Count; i++)
       {
         List<string> columns = rows[i].Split(",").ToList();
+
         results.Add(new Operazione
         {
-          Data = Convert.ToDateTime(columns[0]),
+          Data = DateTime.ParseExact(columns[0], "dd/MM/yyyy", CultureInfo.InvariantCulture),
           Descrizione = columns[5],
           Tipo = columns[3],
-          Importo = ParseDecimal(columns[6]),
+          Importo = ParseDecimal(columns[6].Replace(".",",")),
           IsContabilizzato = false
         });
       }

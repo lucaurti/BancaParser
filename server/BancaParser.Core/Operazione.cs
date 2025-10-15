@@ -14,13 +14,15 @@ namespace BancaParser.Core
 
     public override string ToString()
     {
+      var culture = new CultureInfo("it-IT");
+
       string s = "";
       s += $"{this.Data:yyyy-MM-dd};";
       s += $"\"{this.Tipo}\";";
       s += $"\"{this.Descrizione}\";";
-      s += $"{this.ImportoRossella.ToString(CultureInfo.CurrentCulture)};";
-      s += $"{this.ImportoLuca.ToString(CultureInfo.CurrentCulture)};";
-      s += $"{this.Importo.ToString(CultureInfo.CurrentCulture)};";
+      s += $"{this.ImportoRossella.ToString(culture)};";
+      s += $"{this.ImportoLuca.ToString(culture)};";
+      s += $"{this.Importo.ToString(culture)};";
       s += $"{this.IsContabilizzato:\"S\":\"N\"}";
       return s;
     }

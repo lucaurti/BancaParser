@@ -2,6 +2,7 @@ using BancaParser.Host.Helpers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Globalization;
 using System.Text;
 
 namespace BancaParser.Host
@@ -11,6 +12,8 @@ namespace BancaParser.Host
   {
     public static void Main(string[] args)
     {
+      Thread.CurrentThread.CurrentCulture = new CultureInfo("it-IT");
+      Thread.CurrentThread.CurrentUICulture = new CultureInfo("it-IT");
       var builder = WebApplication.CreateBuilder(args);
       string path = Path.Combine(BancaParser.Core.Utility.PATH_SHARED_FOLDER, "dati", "banca-parser", "appsettings.json");
       FileInfo fileInfo = new FileInfo(path);
