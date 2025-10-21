@@ -301,7 +301,7 @@ namespace BancaParser.Core
         results.Add(new Operazione
         {
           Data = DateTime.ParseExact(columns[0], "dd/MM/yyyy", CultureInfo.InvariantCulture),
-          Descrizione = columns[5],
+          Descrizione = $"{columns[4]} {columns[5]}",
           Tipo = columns[3],
           Importo = ParseDecimal(columns[6].Replace(".",",")),
           IsContabilizzato = false
