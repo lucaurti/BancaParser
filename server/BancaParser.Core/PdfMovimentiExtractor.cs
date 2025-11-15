@@ -59,16 +59,13 @@ namespace BancaParser.Core
       var operazioniDefinitive = new List<Operazione>();
       foreach (var op in operazioni)
       {
-        if (op.Importo > 0)
-        {
-          continue;
-        }
         Operazione newOperazione = new Operazione();
         newOperazione.Data = op.Data;
         newOperazione.Tipo = op.Tipo;
         newOperazione.Importo = Math.Abs(op.Importo);
         newOperazione.ImportoRossella = newOperazione.Importo / 2 * -1;
         newOperazione.ImportoLuca = newOperazione.Importo / 2;
+        newOperazione.Banca = newOperazione.Banca;
         if (op.IsContabilizzato)
         {
           newOperazione.ImportoRossella = 0;
@@ -175,77 +172,192 @@ namespace BancaParser.Core
                           .Select(r => r.Trim())
                           .Where(r => r.Length > 0)
                           .ToList();
+          int rowheader = righe.IndexOf("DATA TIPO DESCRIZIONE IN ENTRATA IN USCITA SALDO");
+          string firstRowDate = righe[rowheader + 1];
+          string secondRowDate = righe[rowheader + 2];
 
-          foreach (var riga in righe)
+          if (Regex.IsMatch(firstRowDate, @"\d{1,2}\s\w{3}\s\d{4}", RegexOptions.IgnoreCase) && Regex.IsMatch(secondRowDate, @"\d{1,2}\s\w{3}\s\d{4}", RegexOptions.IgnoreCase))
           {
-            if (Regex.IsMatch(riga, @"\d{1,2}\s\w{3}\s\d{4}", RegexOptions.IgnoreCase))
+            //ci troviamo nel caso in cui un singolo resoconto è presente nella stessa riga
+            foreach (var riga in righe)
             {
-              var match = Regex.Match(riga, @"^(\d{1,2}\s\w{3}\s\d{4})\s+([A-Za-zÀ-ÿ ]+)\s+(.*?)\s+([\d\.,]*)\s*€?\s*([\d\.,]*)\s*€?\s*([\d\.,]*)\s*€?$");
-
-              if (match.Success)
+              if (Regex.IsMatch(riga, @"^\d{1,2}\s\w{3}\s\d{4}", RegexOptions.IgnoreCase))
               {
-                var data = DateTime.ParseExact(match.Groups[1].Value, "d MMM yyyy", new CultureInfo("it-IT"));
-                string rigaSenzaData = riga.Replace(match.Groups[1].Value, "").Trim();
-                var a = rigaSenzaData.Replace(" €", "€").Split("€", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-                rigaSenzaData = a[0];
-                var match1 = Regex.Match(rigaSenzaData, @"\d{1,3}(?:\.\d{3})*,\d{2}");
-                string valoreStr = "";
-                string tipoDescrizione = "";
-                if (match1.Success)
+                Operazione operazione = getOperazioneTr(riga);
+                if (operazione == null)
                 {
-                  valoreStr = match1.Value;
-                  tipoDescrizione = rigaSenzaData.Replace(match1.Value, "").Trim();
                 }
-
-                string tipo = "";
-                string descrizione = "";
-                decimal entrata = 0;
-                decimal uscita = 0;
-                if (tipoDescrizione.StartsWith("Bonifico"))
+                else
                 {
-                  tipo = "Bonifico";
-                  descrizione = tipoDescrizione.Replace(tipo, "").Trim();
-                  if (tipoDescrizione.ToLower().Contains("incoming"))
-                  {
-                    entrata = ParseDecimal(valoreStr);
-                  }
-                  else
-                  {
-                    uscita = ParseDecimal(valoreStr);
-                  }
-
-                }
-                else if (tipoDescrizione.StartsWith("Transazione con carta"))
-                {
-                  tipo = "Transazione con carta";
-                  descrizione = tipoDescrizione.Replace(tipo, "").Trim();
-                  uscita = ParseDecimal(valoreStr);
-                }
-                else if (tipoDescrizione.StartsWith("Trasferimento"))
-                {
-                  tipo = "Trasferimento";
-                  descrizione = tipoDescrizione.Replace(tipo, "").Trim();
-                  entrata = ParseDecimal(valoreStr);
-                }
-
-                if (entrata == 0 && uscita > 0)
-                {
-                  operazioni.Add(new Operazione
-                  {
-                    Data = data,
-                    Tipo = tipo,
-                    Descrizione = descrizione,
-                    Importo = uscita,
-                    IsContabilizzato = false
-                  });
+                  operazioni.Add(operazione);
                 }
               }
             }
           }
+          else
+          {
+            //ci troviamo nel caso in cui un singolo resoconto è splittato su più righe
+            List<string> lista = new List<string>();
+            List<string> listaTipologie = new List<string>() { "Pagamento degli", "Transazione con", "Premio", "Commercio", "Bonifico" };
+            for (int j = rowheader + 1; j < righe.Count; j = j + 3)
+            {
+              string str = "";
+              var match = Regex.Match(righe[j], @"^\d{2}\s\w{3}");
+              string s = righe[j];
+              if (match.Success)
+              {
+                string giornoMese = match.Groups[0].Value.Trim();
+                if (giornoMese == righe[j])
+                {
+                  // ci troviamo nel caso in cui nella riga c'è solo la data
+                  string anno = righe[j + 2].Trim();
+                  string tipoParte = righe[j + 1].Split(" ").FirstOrDefault();
+                  string descrizione = righe[j + 1].Replace(tipoParte, "");
+                  str += $"{giornoMese.Trim()} {anno.Trim()} {tipoParte.Trim()} {descrizione.Trim()}";
+                }
+                else if (!listaTipologie.Any(t => righe[j].Contains(t, StringComparison.OrdinalIgnoreCase)))
+                {
+                  string descrizioneParziale1 = righe[j].Replace(giornoMese, "").Trim();
+                  string descrizioneParziale2 = "";
+
+                  Regex r = new Regex(@"\d");
+                  Match m = r.Match(righe[j + 1]);
+                  string tipoParte = "";
+                  if (m.Success)
+                  {
+                    tipoParte = righe[j + 1].Substring(0, m.Index).Trim();
+                    descrizioneParziale2 = righe[j + 1].Substring(m.Index).Trim();
+                  }
+                  string anno = righe[j + 2].Substring(0, 4);
+                  string descrizioneParziale3 = righe[j + 2].Substring(4).Trim();
+                  str += $"{giornoMese.Trim()} {anno.Trim()} {tipoParte.Trim()} {descrizioneParziale1} {descrizioneParziale3} {descrizioneParziale2}";
+                }
+                else
+                {
+                  // ci troviamo nel caso in cui nella data c'è una parte di tipologia
+                  string tipoParte1 = righe[j].Replace(giornoMese, "");
+                  List<string> annoTipoParte2 = righe[j + 2].Split(" ").ToList();
+                  string anno = annoTipoParte2.FirstOrDefault();
+                  string tipoParte2 = "";
+                  if (annoTipoParte2.Count > 1)
+                  {
+                    tipoParte2 = annoTipoParte2.LastOrDefault();
+                  }
+                  str += $"{giornoMese.Trim()} {anno.Trim()} {tipoParte1.Trim()} {tipoParte2.Trim()} {righe[j + 1].Trim()}";
+                }
+                lista.Add(str);
+              }
+            }
+
+            for (int k = 0; k < lista.Count; k++)
+            {
+              string riga = lista[k].ToString();
+              Operazione operazione = getOperazioneTr(riga);
+              if (operazione == null)
+              {
+              }
+              else
+              {
+                operazioni.Add(operazione);
+              }
+            }
+          }
+
+
         }
       }
 
       return operazioni;
+    }
+
+    private Operazione getOperazioneTr(string riga)
+    {
+      var match = Regex.Match(riga, @"^(\d{1,2}\s\w{3}\s\d{4})\s+([A-Za-zÀ-ÿ ]+)\s+(.*?)\s+([\d\.,]*)\s*€?\s*([\d\.,]*)\s*€?\s*([\d\.,]*)\s*€?$");
+      Operazione op = null;
+      if (match.Success)
+      {
+        var data = DateTime.ParseExact(match.Groups[1].Value, "d MMM yyyy", new CultureInfo("it-IT"));
+        string rigaSenzaData = riga.Replace(match.Groups[1].Value, "").Trim();
+        var a = rigaSenzaData.Replace(" €", "€").Split("€", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        rigaSenzaData = a[0];
+        var match1 = Regex.Match(rigaSenzaData, @"\d{1,3}(?:\.\d{3})*,\d{2}");
+        string valoreStr = "";
+        string tipoDescrizione = "";
+        if (match1.Success)
+        {
+          valoreStr = match1.Value;
+          tipoDescrizione = rigaSenzaData.Replace(match1.Value, "").Trim();
+        }
+
+        string tipo = "";
+        string descrizione = "";
+        decimal entrata = 0;
+        decimal uscita = 0;
+        if (tipoDescrizione.StartsWith("Bonifico"))
+        {
+          tipo = "Bonifico";
+          descrizione = tipoDescrizione.Replace(tipo, "").Trim();
+          if (tipoDescrizione.ToLower().Contains("incoming"))
+          {
+            entrata = ParseDecimal(valoreStr);
+          }
+          else
+          {
+            uscita = ParseDecimal(valoreStr);
+          }
+
+        }
+        else if (tipoDescrizione.StartsWith("Transazione con carta"))
+        {
+          tipo = "Transazione con carta";
+          descrizione = tipoDescrizione.Replace(tipo, "").Trim();
+          uscita = ParseDecimal(valoreStr);
+        }
+        else if (tipoDescrizione.StartsWith("Commercio"))
+        {
+          tipo = "Commercio azioni";
+          descrizione = tipoDescrizione.Replace(tipo, "").Trim();
+          uscita = ParseDecimal(valoreStr);
+        }
+        else if (tipoDescrizione.StartsWith("Addebito diretto"))
+        {
+          tipo = "Addebito diretto";
+          descrizione = tipoDescrizione.Replace(tipo, "").Trim();
+          uscita = ParseDecimal(valoreStr);
+        }
+        else if (tipoDescrizione.StartsWith("Trasferimento"))
+        {
+          tipo = "Trasferimento";
+          descrizione = tipoDescrizione.Replace(tipo, "").Trim();
+          entrata = ParseDecimal(valoreStr);
+        }
+        else if (tipoDescrizione.StartsWith("Pagamento degli interessi"))
+        {
+          tipo = "Pagamento degli interessi";
+          descrizione = tipoDescrizione.Replace(tipo, "").Trim();
+          entrata = ParseDecimal(valoreStr);
+        }
+        else if (tipoDescrizione.StartsWith("Premio"))
+        {
+          tipo = "Premio";
+          descrizione = tipoDescrizione.Replace(tipo, "").Trim();
+          entrata = ParseDecimal(valoreStr);
+        }
+
+        if (entrata == 0 && uscita > 0)
+        {
+          op = new Operazione
+          {
+            Data = data,
+            Tipo = tipo,
+            Descrizione = descrizione,
+            Importo = uscita,
+            IsContabilizzato = false,
+            Banca ="Trade Republic"
+          };
+        }
+      }
+      return op;
     }
 
     private decimal ParseDecimal(string s)
@@ -282,9 +394,9 @@ namespace BancaParser.Core
             Descrizione = list[i][4],
             Tipo = "",
             Importo = ParseDecimal(list[i][2]),
-            IsContabilizzato = true
+            IsContabilizzato = true,
+            Banca = "BPM"
           });
-
         }
         return results;
       }
@@ -303,8 +415,9 @@ namespace BancaParser.Core
           Data = DateTime.ParseExact(columns[0], "dd/MM/yyyy", CultureInfo.InvariantCulture),
           Descrizione = $"{columns[4]} {columns[5]}",
           Tipo = columns[3],
-          Importo = ParseDecimal(columns[6].Replace(".",",")),
-          IsContabilizzato = false
+          Importo = ParseDecimal(columns[6].Replace(".", ",")),
+          IsContabilizzato = false,
+          Banca = "Hype"
         });
       }
       return results;
@@ -327,7 +440,8 @@ namespace BancaParser.Core
           Descrizione = columns[1],
           Tipo = "",
           Importo = ParseDecimal(columns[6].Replace(".", ",")) * -1,
-          IsContabilizzato = false
+          IsContabilizzato = false,
+          Banca = "Splitwise"
         });
       }
       return results;

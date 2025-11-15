@@ -11,7 +11,7 @@ namespace BancaParser.Core
     public decimal ImportoRossella { get; set; }
     public decimal ImportoLuca { get; set; }
     public bool IsContabilizzato { get; set; }
-
+    public string Banca { get; set; }
     public override string ToString()
     {
       var culture = new CultureInfo("it-IT");
@@ -23,7 +23,8 @@ namespace BancaParser.Core
       s += $"{this.ImportoRossella.ToString(culture)};";
       s += $"{this.ImportoLuca.ToString(culture)};";
       s += $"{this.Importo.ToString(culture)};";
-      s += $"{this.IsContabilizzato:\"S\":\"N\"}";
+      s += $"{this.IsContabilizzato:\"S\":\"N\"};";
+      s += $"{this.Banca}";
       return s;
     }
   }
