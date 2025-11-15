@@ -24,7 +24,7 @@ namespace BancaParser.Core
       s += $"{this.ImportoLuca.ToString(culture)};";
       s += $"{this.Importo.ToString(culture)};";
       s += $"{this.IsContabilizzato:\"S\":\"N\"};";
-      s += $"{this.Banca}";
+      s += $"\"{this.Banca}\"";
       return s;
     }
   }

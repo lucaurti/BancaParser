@@ -46,7 +46,7 @@ namespace BancaParser.Core
       // CSV operazioni
       using (var sw = new StreamWriter(outputOperazioni))
       {
-        sw.WriteLine("Data;Tipo;Descrizione;Rossella;Luca;Importo;Contabilizzato");
+        sw.WriteLine("Data;Tipo;Descrizione;Rossella;Luca;Importo;Contabilizzato;Banca");
         foreach (var op in operazioniDefinitive)
         {
           sw.WriteLine($"{op.ToString()}");
@@ -65,7 +65,7 @@ namespace BancaParser.Core
         newOperazione.Importo = Math.Abs(op.Importo);
         newOperazione.ImportoRossella = newOperazione.Importo / 2 * -1;
         newOperazione.ImportoLuca = newOperazione.Importo / 2;
-        newOperazione.Banca = newOperazione.Banca;
+        newOperazione.Banca = op.Banca;
         if (op.IsContabilizzato)
         {
           newOperazione.ImportoRossella = 0;
@@ -151,7 +151,8 @@ namespace BancaParser.Core
           Descrizione = descrizione,
           Tipo = tipoTransazione,
           Importo = importo,
-          IsContabilizzato = false
+          IsContabilizzato = false,
+          Banca="ING"
         });
       }
 
