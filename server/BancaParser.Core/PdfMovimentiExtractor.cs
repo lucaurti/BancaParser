@@ -8,6 +8,12 @@ namespace BancaParser.Core
 {
   public class PdfMovimentiExtractor
   {
+    private const string SPLITWISE = "Splitwise";
+    private const string HYPE = "Hype";
+    private const string BPM = "BPM";
+    private const string TRADEREPUBBLIC = "Trade Republic";
+    private const string ING = "ING";
+
     public List<Operazione> RecuperaOperazioni(List<string> files)
     {
       List<Operazione> operazioni = new List<Operazione>();
@@ -63,9 +69,18 @@ namespace BancaParser.Core
         newOperazione.Data = op.Data;
         newOperazione.Tipo = op.Tipo;
         newOperazione.Importo = Math.Abs(op.Importo);
-        newOperazione.ImportoRossella = newOperazione.Importo / 2 * -1;
-        newOperazione.ImportoLuca = newOperazione.Importo / 2;
         newOperazione.Banca = op.Banca;
+        if (newOperazione.Banca == SPLITWISE)
+        {
+          newOperazione.ImportoRossella = op.ImportoRossella;
+          newOperazione.ImportoLuca = op.ImportoLuca;
+        }
+        else 
+        {
+          newOperazione.ImportoRossella = op.Importo / 2 * -1;
+          newOperazione.ImportoLuca = op.Importo / 2;
+        }
+        
         if (op.IsContabilizzato)
         {
           newOperazione.ImportoRossella = 0;
@@ -74,9 +89,9 @@ namespace BancaParser.Core
         newOperazione.Descrizione = op.Descrizione;
         foreach (var item in descrizioniInConfig)
         {
-          if (op.Descrizione.ToLower().Contains(item.Key))
+          if (op.Descrizione.ToLower().Contains(item.Key.ToLower()))
           {
-            newOperazione.Descrizione = item.Value;
+            newOperazione.Descrizione = CapitalizeFirst(item.Value);
             break;
           }
         }
@@ -84,6 +99,14 @@ namespace BancaParser.Core
       }
 
       return operazioniDefinitive;
+    }
+
+    private string CapitalizeFirst(string input)
+    {
+      if (string.IsNullOrEmpty(input))
+        return input;
+
+      return char.ToUpper(input[0], CultureInfo.CurrentCulture) + input.Substring(1);
     }
 
     private List<Operazione> EstraiMovimentiFromIng(string pdfPath)
@@ -145,15 +168,18 @@ namespace BancaParser.Core
           tipoTransazione += $" {annoTipoTransazioneList[j]}";
         }
         descrizione = descrizione.Replace("Saldo Disponibile", " Saldo Disponibile");
-        results.Add(new Operazione
+        if (importo < 0)
         {
-          Data = new DateTime(anno, mese, giorno),
-          Descrizione = descrizione,
-          Tipo = tipoTransazione,
-          Importo = importo,
-          IsContabilizzato = false,
-          Banca="ING"
-        });
+          results.Add(new Operazione
+          {
+            Data = new DateTime(anno, mese, giorno),
+            Descrizione = descrizione,
+            Tipo = tipoTransazione,
+            Importo = importo,
+            IsContabilizzato = false,
+            Banca = ING
+          });
+        }
       }
 
       return results;
@@ -263,8 +289,6 @@ namespace BancaParser.Core
               }
             }
           }
-
-
         }
       }
 
@@ -354,7 +378,7 @@ namespace BancaParser.Core
             Descrizione = descrizione,
             Importo = uscita,
             IsContabilizzato = false,
-            Banca ="Trade Republic"
+            Banca = TRADEREPUBBLIC
           };
         }
       }
@@ -389,19 +413,23 @@ namespace BancaParser.Core
         var results = new List<Operazione>();
         for (int i = 1; i < list.Count; i++)
         {
-          results.Add(new Operazione
+          decimal importoTemp = ParseDecimal(list[i][2]);
+          if (importoTemp < 0)
           {
-            Data = Convert.ToDateTime(list[i][0]),
-            Descrizione = list[i][4],
-            Tipo = "",
-            Importo = ParseDecimal(list[i][2]),
-            IsContabilizzato = true,
-            Banca = "BPM"
-          });
+            results.Add(new Operazione
+            {
+              Data = Convert.ToDateTime(list[i][0]),
+              Descrizione = list[i][4],
+              Tipo = "",
+              Importo = importoTemp,
+              IsContabilizzato = true,
+              Banca = BPM
+            });
+          }
         }
         return results;
       }
-    }
+    }    
 
     private List<Operazione> EstraiMovimentiFromHype(string fullName)
     {
@@ -418,7 +446,7 @@ namespace BancaParser.Core
           Tipo = columns[3],
           Importo = ParseDecimal(columns[6].Replace(".", ",")),
           IsContabilizzato = false,
-          Banca = "Hype"
+          Banca = HYPE
         });
       }
       return results;
@@ -440,9 +468,11 @@ namespace BancaParser.Core
           Data = Convert.ToDateTime(columns[0]),
           Descrizione = columns[1],
           Tipo = "",
-          Importo = ParseDecimal(columns[6].Replace(".", ",")) * -1,
+          Importo= ParseDecimal(columns[3].Replace(".", ",")),
+          ImportoRossella = ParseDecimal(columns[5].Replace(".", ",")),
+          ImportoLuca = ParseDecimal(columns[6].Replace(".", ",")),
           IsContabilizzato = false,
-          Banca = "Splitwise"
+          Banca = SPLITWISE
         });
       }
       return results;
