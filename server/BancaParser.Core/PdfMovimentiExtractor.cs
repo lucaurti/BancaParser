@@ -311,14 +311,14 @@ namespace BancaParser.Core
         if (match1.Success)
         {
           valoreStr = match1.Value;
-          tipoDescrizione = rigaSenzaData.Replace(match1.Value, "").Trim();
+          tipoDescrizione = rigaSenzaData.Replace(match1.Value, "").Replace("null","").Trim();
         }
 
         string tipo = "";
         string descrizione = "";
         decimal entrata = 0;
         decimal uscita = 0;
-        if (tipoDescrizione.StartsWith("Bonifico"))
+        if (tipoDescrizione.Contains("Bonifico"))
         {
           tipo = "Bonifico";
           descrizione = tipoDescrizione.Replace(tipo, "").Trim();
@@ -332,37 +332,37 @@ namespace BancaParser.Core
           }
 
         }
-        else if (tipoDescrizione.StartsWith("Transazione con carta"))
+        else if (tipoDescrizione.Contains("Transazione con carta"))
         {
           tipo = "Transazione con carta";
           descrizione = tipoDescrizione.Replace(tipo, "").Trim();
           uscita = ParseDecimal(valoreStr);
         }
-        else if (tipoDescrizione.StartsWith("Commercio"))
+        else if (tipoDescrizione.Contains("Commercio"))
         {
           tipo = "Commercio azioni";
           descrizione = tipoDescrizione.Replace(tipo, "").Trim();
           uscita = ParseDecimal(valoreStr);
         }
-        else if (tipoDescrizione.StartsWith("Addebito diretto"))
+        else if (tipoDescrizione.Contains("Addebito diretto"))
         {
           tipo = "Addebito diretto";
           descrizione = tipoDescrizione.Replace(tipo, "").Trim();
           uscita = ParseDecimal(valoreStr);
         }
-        else if (tipoDescrizione.StartsWith("Trasferimento"))
+        else if (tipoDescrizione.Contains("Trasferimento"))
         {
           tipo = "Trasferimento";
           descrizione = tipoDescrizione.Replace(tipo, "").Trim();
           entrata = ParseDecimal(valoreStr);
         }
-        else if (tipoDescrizione.StartsWith("Pagamento degli interessi"))
+        else if (tipoDescrizione.Contains("Pagamento degli interessi"))
         {
           tipo = "Pagamento degli interessi";
           descrizione = tipoDescrizione.Replace(tipo, "").Trim();
           entrata = ParseDecimal(valoreStr);
         }
-        else if (tipoDescrizione.StartsWith("Premio"))
+        else if (tipoDescrizione.Contains("Premio"))
         {
           tipo = "Premio";
           descrizione = tipoDescrizione.Replace(tipo, "").Trim();
