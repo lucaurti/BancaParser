@@ -86,12 +86,12 @@ namespace BancaParser.Core
           newOperazione.ImportoRossella = 0;
           newOperazione.ImportoLuca = 0;
         }
-        newOperazione.Descrizione = op.Descrizione;
+        newOperazione.Descrizione = CapitalizeWords(op.Descrizione);
         foreach (var item in descrizioniInConfig)
         {
           if (op.Descrizione.ToLower().Contains(item.Key.ToLower()))
           {
-            newOperazione.Descrizione = CapitalizeFirst(item.Value);
+            newOperazione.Descrizione = CapitalizeWords(item.Value);
             break;
           }
         }
@@ -101,12 +101,21 @@ namespace BancaParser.Core
       return operazioniDefinitive;
     }
 
-    private string CapitalizeFirst(string input)
+    public static string CapitalizeWords(string input)
     {
-      if (string.IsNullOrEmpty(input))
+      if (string.IsNullOrWhiteSpace(input))
         return input;
 
-      return char.ToUpper(input[0], CultureInfo.CurrentCulture) + input.Substring(1);
+      var words = input
+          .ToLowerInvariant()
+          .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+      for (int i = 0; i < words.Length; i++)
+      {
+        words[i] = char.ToUpper(words[i][0]) + words[i].Substring(1);
+      }
+
+      return string.Join(' ', words);
     }
 
     private List<Operazione> EstraiMovimentiFromIng(string pdfPath)
@@ -297,7 +306,7 @@ namespace BancaParser.Core
 
     private Operazione getOperazioneTr(string riga)
     {
-      var match = Regex.Match(riga, @"^(\d{1,2}\s\w{3}\s\d{4})\s+([A-Za-zÀ-ÿ ]+)\s+(.*?)\s+([\d\.,]*)\s*€?\s*([\d\.,]*)\s*€?\s*([\d\.,]*)\s*€?$");
+      var match = Regex.Match(riga, @"^(\d{1,2}\s\w{3}\s\d{4})\s+([A-Za-zÀ-ÿ '*]+)\s+(.*?)\s+([\d\.,]*)\s*€?\s*([\d\.,]*)\s*€?\s*([\d\.,]*)\s*€?$");
       Operazione op = null;
       if (match.Success)
       {
@@ -469,8 +478,8 @@ namespace BancaParser.Core
           Descrizione = columns[1],
           Tipo = "",
           Importo= ParseDecimal(columns[3].Replace(".", ",")),
-          ImportoRossella = ParseDecimal(columns[5].Replace(".", ",")),
-          ImportoLuca = ParseDecimal(columns[6].Replace(".", ",")),
+          ImportoRossella = ParseDecimal(columns[6].Replace(".", ",")),
+          ImportoLuca = ParseDecimal(columns[5].Replace(".", ",")),
           IsContabilizzato = false,
           Banca = SPLITWISE
         });
