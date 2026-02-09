@@ -77,8 +77,8 @@ namespace BancaParser.Core
         }
         else 
         {
-          newOperazione.ImportoRossella = op.Importo / 2 * -1;
-          newOperazione.ImportoLuca = op.Importo / 2;
+          newOperazione.ImportoRossella = newOperazione.Importo / 2 * -1;
+          newOperazione.ImportoLuca = newOperazione.Importo / 2;
         }
         
         if (op.IsContabilizzato)
@@ -306,7 +306,7 @@ namespace BancaParser.Core
 
     private Operazione getOperazioneTr(string riga)
     {
-      var match = Regex.Match(riga, @"^(\d{1,2}\s\w{3}\s\d{4})\s+([A-Za-zÀ-ÿ '*]+)\s+(.*?)\s+([\d\.,]*)\s*€?\s*([\d\.,]*)\s*€?\s*([\d\.,]*)\s*€?$");
+      var match = Regex.Match(riga, @"^(\d{1,2}\s\w{3}\s\d{4})\s+([A-Za-zÀ-ÿ '*&.]+)\s+(.*?)\s+([\d\.,]*)\s*€?\s*([\d\.,]*)\s*€?\s*([\d\.,]*)\s*€?$");
       Operazione op = null;
       if (match.Success)
       {
