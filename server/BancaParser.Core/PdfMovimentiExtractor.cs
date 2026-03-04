@@ -11,6 +11,7 @@ namespace BancaParser.Core
     private const string SPLITWISE = "Splitwise";
     private const string HYPE = "Hype";
     private const string BPM = "BPM";
+    private const string SATISPAY = "Satispay";
     private const string TRADEREPUBBLIC = "Trade Republic";
     private const string ING = "ING";
 
@@ -42,9 +43,50 @@ namespace BancaParser.Core
           case string s when s.StartsWith("splitwise"):
             operazioni.AddRange(EstraiMovimentiFromSplitwise(fileInfo.FullName));
             break;
+          case string s when s.StartsWith("satispay"):
+            operazioni.AddRange(EstraiMovimentiFromSatispay(fileInfo.FullName));
+            break;
         }
       }
       return operazioni;
+    }
+
+    private IEnumerable<Operazione> EstraiMovimentiFromSatispay(string fullName)
+    {
+      using (var workbook = new XLWorkbook(fullName))
+      {
+        var worksheet = workbook.Worksheet(1);
+        List<List<string>> list = new List<List<string>>();
+        foreach (var row in worksheet.RowsUsed())
+        {
+          var values = row.Cells().Select(c =>
+          {
+            string v = c.GetValue<string>();
+            if (v.Contains(",") || v.Contains("\""))
+              v = $"\"{v.Replace("\"", "\"\"")}\"";
+            return v;
+          }).ToList();
+          list.Add(values);
+        }
+        var results = new List<Operazione>();
+        for (int i = 1; i < list.Count; i++)
+        {
+          decimal importoTemp = ParseDecimal(list[i][3]);
+          if (importoTemp < 0)
+          {
+            results.Add(new Operazione
+            {
+              Data = Convert.ToDateTime(list[i][0]),
+              Descrizione = list[i][1],
+              Tipo = "",
+              Importo = importoTemp,
+              IsContabilizzato = true,
+              Banca = SATISPAY
+            });
+          }
+        }
+        return results;
+      }
     }
 
     public void ExportToCsv(string outputOperazioni, List<Operazione> operazioniDefinitive)
