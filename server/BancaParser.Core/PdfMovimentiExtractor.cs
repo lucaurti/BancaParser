@@ -76,7 +76,7 @@ namespace BancaParser.Core
           {
             results.Add(new Operazione
             {
-              Data = Convert.ToDateTime(list[i][0]),
+              Data = DateTime.ParseExact(list[i][0], "dd/MM/yyyy HH:mm:ss", CultureInfo.InvariantCulture),
               Descrizione = list[i][1],
               Tipo = "",
               Importo = importoTemp,
@@ -117,12 +117,12 @@ namespace BancaParser.Core
           newOperazione.ImportoRossella = op.ImportoRossella;
           newOperazione.ImportoLuca = op.ImportoLuca;
         }
-        else 
+        else
         {
           newOperazione.ImportoRossella = newOperazione.Importo / 2 * -1;
           newOperazione.ImportoLuca = newOperazione.Importo / 2;
         }
-        
+
         if (op.IsContabilizzato)
         {
           newOperazione.ImportoRossella = 0;
@@ -362,7 +362,7 @@ namespace BancaParser.Core
         if (match1.Success)
         {
           valoreStr = match1.Value;
-          tipoDescrizione = rigaSenzaData.Replace(match1.Value, "").Replace("null","").Trim();
+          tipoDescrizione = rigaSenzaData.Replace(match1.Value, "").Replace("null", "").Trim();
         }
 
         string tipo = "";
@@ -469,7 +469,7 @@ namespace BancaParser.Core
           {
             results.Add(new Operazione
             {
-              Data = Convert.ToDateTime(list[i][0]),
+              Data = DateTime.ParseExact(list[i][0], "dd/MM/yyyy", CultureInfo.InvariantCulture),
               Descrizione = list[i][4],
               Tipo = "",
               Importo = importoTemp,
@@ -480,7 +480,7 @@ namespace BancaParser.Core
         }
         return results;
       }
-    }    
+    }
 
     private List<Operazione> EstraiMovimentiFromHype(string fullName)
     {
@@ -519,7 +519,7 @@ namespace BancaParser.Core
           Data = Convert.ToDateTime(columns[0]),
           Descrizione = columns[1],
           Tipo = "",
-          Importo= ParseDecimal(columns[3].Replace(".", ",")),
+          Importo = ParseDecimal(columns[3].Replace(".", ",")),
           ImportoRossella = ParseDecimal(columns[6].Replace(".", ",")),
           ImportoLuca = ParseDecimal(columns[5].Replace(".", ",")),
           IsContabilizzato = false,
