@@ -199,37 +199,79 @@ namespace BancaParser.Core
       {
         List<string> movList = listaMovimentiString[i].Split("\n", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
         string dataGiornoMeseImportoTipo = movList[1];
-        List<string> dataGiornoMeseImportoTipoList = dataGiornoMeseImportoTipo.Split(" ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
-        movList.RemoveAt(1);
-        string annoTipoTransazione = movList[2];
-        List<string> annoTipoTransazioneList = annoTipoTransazione.Split(" ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
-        movList.RemoveAt(2);
-        string descrizione = "";
-        foreach (var item in movList)
+        List<string> giornoMeseImportoTipoList = dataGiornoMeseImportoTipo.Split(" ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
+        //devo verificare se la data è su 2 righe. per farlo verifico se il terzo elemento è una stringa. se lo è allora la data è messa su 2 righe altrimenti è messa su una sola riga
+        int annotemp = 0;
+        bool isDataSuUnaRiga = int.TryParse(giornoMeseImportoTipoList[2], out annotemp);
+        if (!isDataSuUnaRiga)
         {
-          descrizione += item;
-        }
-        int giorno = int.Parse(dataGiornoMeseImportoTipoList[0]);
-        int mese = Array.IndexOf(Months, dataGiornoMeseImportoTipoList[1]) + 1;
-        int anno = int.Parse(annoTipoTransazioneList[0]);
-        decimal importo = ParseDecimal(dataGiornoMeseImportoTipoList[3]);
-        string tipoTransazione = dataGiornoMeseImportoTipoList[2];
-        for (int j = 1; j < annoTipoTransazioneList.Count; j++)
-        {
-          tipoTransazione += $" {annoTipoTransazioneList[j]}";
-        }
-        descrizione = descrizione.Replace("Saldo Disponibile", " Saldo Disponibile");
-        if (importo < 0)
-        {
-          results.Add(new Operazione
+          //la data è su due righe
+          movList.RemoveAt(1);
+          string annoTipoTransazione = movList[2];
+          List<string> annoTipoTransazioneList = annoTipoTransazione.Split(" ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
+          movList.RemoveAt(2);
+          string descrizione = "";
+          foreach (var item in movList)
           {
-            Data = new DateTime(anno, mese, giorno),
-            Descrizione = descrizione,
-            Tipo = tipoTransazione,
-            Importo = importo,
-            IsContabilizzato = false,
-            Banca = ING
-          });
+            descrizione += item;
+          }
+          int giorno = int.Parse(giornoMeseImportoTipoList[0]);
+          int mese = Array.IndexOf(Months, giornoMeseImportoTipoList[1]) + 1;
+          int anno = int.Parse(annoTipoTransazioneList[0]);
+          decimal importo = ParseDecimal(giornoMeseImportoTipoList[3]);
+          string tipoTransazione = giornoMeseImportoTipoList[2];
+          for (int j = 1; j < annoTipoTransazioneList.Count; j++)
+          {
+            tipoTransazione += $" {annoTipoTransazioneList[j]}";
+          }
+          descrizione = descrizione.Replace("Saldo Disponibile", " Saldo Disponibile");
+          if (importo < 0)
+          {
+            results.Add(new Operazione
+            {
+              Data = new DateTime(anno, mese, giorno),
+              Descrizione = descrizione,
+              Tipo = tipoTransazione,
+              Importo = importo,
+              IsContabilizzato = false,
+              Banca = ING
+            });
+          }
+        }
+        else 
+        {
+          //la data è su una riga sola
+          movList.RemoveAt(1);
+          string annoTipoTransazione = movList[2];
+          List<string> annoTipoTransazioneList = annoTipoTransazione.Split(" ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
+          movList.RemoveAt(2);
+          string descrizione = "";
+          foreach (var item in movList)
+          {
+            descrizione += item;
+          }
+          int giorno = int.Parse(giornoMeseImportoTipoList[0]);
+          int mese = Array.IndexOf(Months, giornoMeseImportoTipoList[1]) + 1;
+          int anno = annotemp;
+          decimal importo = ParseDecimal(giornoMeseImportoTipoList[4]);
+          string tipoTransazione = giornoMeseImportoTipoList[3];
+          for (int j = 0; j < annoTipoTransazioneList.Count; j++)
+          {
+            tipoTransazione += $" {annoTipoTransazioneList[j]}";
+          }
+          descrizione = descrizione.Replace("Saldo Disponibile", " Saldo Disponibile");
+          if (importo < 0)
+          {
+            results.Add(new Operazione
+            {
+              Data = new DateTime(anno, mese, giorno),
+              Descrizione = descrizione,
+              Tipo = tipoTransazione,
+              Importo = importo,
+              IsContabilizzato = false,
+              Banca = ING
+            });
+          }
         }
       }
 
