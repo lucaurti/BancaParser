@@ -1,7 +1,11 @@
 ﻿using ClosedXML.Excel;
+using iText.Kernel.Geom;
 using iText.Kernel.Pdf;
 using iText.Kernel.Pdf.Canvas.Parser;
+using iText.Kernel.Pdf.Canvas.Parser.Data;
+using iText.Kernel.Pdf.Canvas.Parser.Listener;
 using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace BancaParser.Core
@@ -26,13 +30,21 @@ namespace BancaParser.Core
           case string s when s.StartsWith("tr"):
           case string s1 when s1.StartsWith("trade_repubblic"):
           case string s2 when s2.StartsWith("traderepubblic"):
-            operazioni.AddRange(EstraiMovimentiFromTr(fileInfo.FullName));
+            if (fileInfo.Extension.Equals(".csv", StringComparison.OrdinalIgnoreCase))
+            {
+              operazioni.AddRange(EstraiMovimentiFromTrCsv(fileInfo.FullName));
+            }
+            else
+            {
+              operazioni.AddRange(EstraiMovimentiFromTr(fileInfo.FullName));
+            }
             break;
           case string s when s.StartsWith("ing"):
           case string s1 when s1.StartsWith("ing direct"):
           case string s2 when s2.StartsWith("ingdirect"):
           case string s3 when s3.StartsWith("ing_direct"):
-            operazioni.AddRange(EstraiMovimentiFromIng(fileInfo.FullName));
+            //operazioni.AddRange(EstraiMovimentiFromIng(fileInfo.FullName));
+            operazioni.AddRange(EstraiGrigliaPdfConRigheMultiple(fileInfo.FullName));
             break;
           case string s when s.StartsWith("bpm"):
             operazioni.AddRange(EstraiMovimentiFromBpm(fileInfo.FullName));
@@ -174,12 +186,13 @@ namespace BancaParser.Core
         }
         fullText = sb.ToString();
       }
-      int start = fullText.IndexOf("(EUR)(EUR)") + 10;
+      int start = fullText.IndexOf("(EUR)to (EUR)") + 13;
       string movimentiString = fullText.Substring(start, fullText.Length - start);
       movimentiString = movimentiString.Replace("TipoTipo", "");
       movimentiString = movimentiString.Replace("ImporImportoto", "");
       movimentiString = movimentiString.Replace("DatData Ca Contontabileabile DescrizioneDescrizione", "");
       movimentiString = movimentiString.Replace("TTrransazioneansazione (EUR)(EUR)", "");
+      movimentiString = movimentiString.Replace("TTrransazioneansazione", "");
       int startIndex = 0;
       List<string> listaMovimentiString = new List<string>();
       while (true)
@@ -199,79 +212,37 @@ namespace BancaParser.Core
       {
         List<string> movList = listaMovimentiString[i].Split("\n", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
         string dataGiornoMeseImportoTipo = movList[1];
-        List<string> giornoMeseImportoTipoList = dataGiornoMeseImportoTipo.Split(" ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
-        //devo verificare se la data è su 2 righe. per farlo verifico se il terzo elemento è una stringa. se lo è allora la data è messa su 2 righe altrimenti è messa su una sola riga
-        int annotemp = 0;
-        bool isDataSuUnaRiga = int.TryParse(giornoMeseImportoTipoList[2], out annotemp);
-        if (!isDataSuUnaRiga)
+        List<string> dataGiornoMeseImportoTipoList = dataGiornoMeseImportoTipo.Split(" ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
+        movList.RemoveAt(1);
+        string annoTipoTransazione = movList[2];
+        List<string> annoTipoTransazioneList = annoTipoTransazione.Split(" ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
+        movList.RemoveAt(2);
+        string descrizione = "";
+        foreach (var item in movList)
         {
-          //la data è su due righe
-          movList.RemoveAt(1);
-          string annoTipoTransazione = movList[2];
-          List<string> annoTipoTransazioneList = annoTipoTransazione.Split(" ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
-          movList.RemoveAt(2);
-          string descrizione = "";
-          foreach (var item in movList)
-          {
-            descrizione += item;
-          }
-          int giorno = int.Parse(giornoMeseImportoTipoList[0]);
-          int mese = Array.IndexOf(Months, giornoMeseImportoTipoList[1]) + 1;
-          int anno = int.Parse(annoTipoTransazioneList[0]);
-          decimal importo = ParseDecimal(giornoMeseImportoTipoList[3]);
-          string tipoTransazione = giornoMeseImportoTipoList[2];
-          for (int j = 1; j < annoTipoTransazioneList.Count; j++)
-          {
-            tipoTransazione += $" {annoTipoTransazioneList[j]}";
-          }
-          descrizione = descrizione.Replace("Saldo Disponibile", " Saldo Disponibile");
-          if (importo < 0)
-          {
-            results.Add(new Operazione
-            {
-              Data = new DateTime(anno, mese, giorno),
-              Descrizione = descrizione,
-              Tipo = tipoTransazione,
-              Importo = importo,
-              IsContabilizzato = false,
-              Banca = ING
-            });
-          }
+          descrizione += item;
         }
-        else 
+        int giorno = int.Parse(dataGiornoMeseImportoTipoList[0]);
+        int mese = Array.IndexOf(Months, dataGiornoMeseImportoTipoList[1]) + 1;
+        int anno = int.Parse(dataGiornoMeseImportoTipoList[2]);
+        decimal importo = ParseDecimal(dataGiornoMeseImportoTipoList[4]);
+        string tipoTransazione = "";//dataGiornoMeseImportoTipoList[2];
+        for (int j = 1; j < annoTipoTransazioneList.Count; j++)
         {
-          //la data è su una riga sola
-          movList.RemoveAt(1);
-          string annoTipoTransazione = movList[2];
-          List<string> annoTipoTransazioneList = annoTipoTransazione.Split(" ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
-          movList.RemoveAt(2);
-          string descrizione = "";
-          foreach (var item in movList)
+          tipoTransazione += $" {annoTipoTransazioneList[j]}";
+        }
+        descrizione = descrizione.Replace("Saldo Disponibile", " Saldo Disponibile");
+        if (importo < 0)
+        {
+          results.Add(new Operazione
           {
-            descrizione += item;
-          }
-          int giorno = int.Parse(giornoMeseImportoTipoList[0]);
-          int mese = Array.IndexOf(Months, giornoMeseImportoTipoList[1]) + 1;
-          int anno = annotemp;
-          decimal importo = ParseDecimal(giornoMeseImportoTipoList[4]);
-          string tipoTransazione = giornoMeseImportoTipoList[3];
-          for (int j = 0; j < annoTipoTransazioneList.Count; j++)
-          {
-            tipoTransazione += $" {annoTipoTransazioneList[j]}";
-          }
-          descrizione = descrizione.Replace("Saldo Disponibile", " Saldo Disponibile");
-          if (importo < 0)
-          {
-            results.Add(new Operazione
-            {
-              Data = new DateTime(anno, mese, giorno),
-              Descrizione = descrizione,
-              Tipo = tipoTransazione,
-              Importo = importo,
-              IsContabilizzato = false,
-              Banca = ING
-            });
-          }
+            Data = new DateTime(anno, mese, giorno),
+            Descrizione = descrizione,
+            Tipo = tipoTransazione,
+            Importo = importo,
+            IsContabilizzato = false,
+            Banca = ING
+          });
         }
       }
 
@@ -478,6 +449,313 @@ namespace BancaParser.Core
       return op;
     }
 
+    public List<Operazione> EstraiGrigliaPdfConRigheMultiple(string pdfPath)
+    {
+      return EstraiGrigliaPdfConRigheMultiple(pdfPath, 95, 245, 445);
+    }
+
+    public List<Operazione> EstraiGrigliaPdfConRigheMultiple(string pdfPath, float limiteColonna1, float limiteColonna2, float limiteColonna3)
+    {
+      List<List<string>> macroRighe = EstraiMacroRighePdfConRigheMultiple(pdfPath, limiteColonna1, limiteColonna2, limiteColonna3);
+      var operazioni = new List<Operazione>();
+
+      foreach (List<string> macroRiga in macroRighe)
+      {
+        if (macroRiga.Count < 4)
+        {
+          continue;
+        }
+        var importo = ParseDecimal(macroRiga[3]);
+        if (importo > 0)
+        {
+          continue;
+        }
+        operazioni.Add(new Operazione
+        {
+          Data = ParseDataMacroRiga(macroRiga[0]),
+          Tipo = "",
+          Descrizione = $"{macroRiga[1]} {macroRiga[2]}".Trim(),
+          Importo = importo,
+          IsContabilizzato = false,
+          Banca = ING
+        });
+      }
+
+      return operazioni;
+    }
+
+    public List<List<string>> EstraiMacroRighePdfConRigheMultiple(string pdfPath)
+    {
+      return EstraiMacroRighePdfConRigheMultiple(pdfPath, 95, 245, 445);
+    }
+
+    public List<List<string>> EstraiMacroRighePdfConRigheMultiple(string pdfPath, float limiteColonna1, float limiteColonna2, float limiteColonna3)
+    {
+      var macroRighe = new List<List<string>>();
+      List<string>? macroRigaCorrente = null;
+      List<List<PdfTextFragment>> righeFisiche = EstraiRigheFisichePdf(pdfPath);
+
+      foreach (List<PdfTextFragment> rigaFisica in righeFisiche)
+      {
+        List<string> colonne = EstraiQuattroColonne(rigaFisica, limiteColonna1, limiteColonna2, limiteColonna3);
+        NormalizzaDataSpezzataPrimaColonna(colonne);
+
+        if (ContieneDataPrimaColonna(colonne))
+        {
+          macroRigaCorrente = colonne;
+          macroRighe.Add(macroRigaCorrente);
+        }
+        else if (macroRigaCorrente != null)
+        {
+          AccodaSottorigaAMacroRiga(macroRigaCorrente, colonne);
+        }
+      }
+
+      return macroRighe;
+    }
+
+    private DateTime ParseDataMacroRiga(string data)
+    {
+      string[] formatiData = { "dd/MM/yyyy", "d/M/yyyy", "dd-MM-yyyy", "d-M-yyyy", "d MMM yyyy", "dd MMM yyyy", "d MMMM yyyy", "dd MMMM yyyy" };
+      string dataNormalizzata = EstraiDataIniziale(data);
+
+      if (DateTime.TryParseExact(dataNormalizzata, formatiData, new CultureInfo("it-IT"), DateTimeStyles.None, out DateTime dataParsed))
+      {
+        return dataParsed;
+      }
+
+      return DateTime.ParseExact(dataNormalizzata, formatiData, CultureInfo.InvariantCulture, DateTimeStyles.None);
+    }
+
+    private string EstraiDataIniziale(string testo)
+    {
+      Match match = Regex.Match(
+          testo.Trim(),
+          @"^(\d{1,2}[/-]\d{1,2}[/-]\d{4}|\d{1,2}\s+[A-Za-zÀ-ÿ]+\s+\d{4})");
+
+      return match.Success ? match.Groups[1].Value.Trim() : testo.Trim();
+    }
+
+    public List<PdfTextFragment> EstraiFrammentiPdfConCoordinate(string pdfPath)
+    {
+      var fragments = new List<PdfTextFragment>();
+
+      using (var reader = new PdfReader(pdfPath))
+      using (var pdf = new PdfDocument(reader))
+      {
+        for (int pageNumber = 1; pageNumber <= pdf.GetNumberOfPages(); pageNumber++)
+        {
+          var listener = new TextCoordinateExtractionListener(pageNumber);
+          var processor = new PdfCanvasProcessor(listener);
+          processor.ProcessPageContent(pdf.GetPage(pageNumber));
+          fragments.AddRange(listener.Fragments);
+        }
+      }
+
+      return fragments
+          .OrderBy(f => f.Page)
+          .ThenByDescending(f => f.Y)
+          .ThenBy(f => f.X)
+          .ToList();
+    }
+
+    private List<List<PdfTextFragment>> EstraiRigheFisichePdf(string pdfPath)
+    {
+      const float tolleranzaY = 2.5f;
+      var righe = new List<List<PdfTextFragment>>();
+
+      foreach (var pageGroup in EstraiFrammentiPdfConCoordinate(pdfPath).GroupBy(f => f.Page).OrderBy(g => g.Key))
+      {
+        foreach (PdfTextFragment fragment in pageGroup.OrderByDescending(f => f.Y).ThenBy(f => f.X))
+        {
+          List<PdfTextFragment>? riga = righe
+              .Where(r => r[0].Page == fragment.Page)
+              .FirstOrDefault(r => Math.Abs(r.Average(f => f.Y) - fragment.Y) <= tolleranzaY);
+
+          if (riga == null)
+          {
+            riga = new List<PdfTextFragment>();
+            righe.Add(riga);
+          }
+
+          riga.Add(fragment);
+        }
+      }
+
+      return righe
+          .OrderBy(r => r[0].Page)
+          .ThenByDescending(r => r.Average(f => f.Y))
+          .ToList();
+    }
+
+    private List<string> EstraiQuattroColonne(List<PdfTextFragment> riga, float limiteColonna1, float limiteColonna2, float limiteColonna3)
+    {
+      var colonne = new StringBuilder[] { new StringBuilder(), new StringBuilder(), new StringBuilder(), new StringBuilder() };
+      var ultimoFrammentoPerColonna = new PdfTextFragment?[4];
+
+      foreach (PdfTextFragment fragment in riga.OrderBy(f => f.X))
+      {
+        int indiceColonna = GetIndiceColonna(fragment.X, limiteColonna1, limiteColonna2, limiteColonna3);
+        PdfTextFragment? ultimoFrammento = ultimoFrammentoPerColonna[indiceColonna];
+
+        if (ultimoFrammento != null && fragment.X - ultimoFrammento.EndX > 2.2f && colonne[indiceColonna].Length > 0)
+        {
+          colonne[indiceColonna].Append(' ');
+        }
+
+        colonne[indiceColonna].Append(fragment.Text);
+        ultimoFrammentoPerColonna[indiceColonna] = fragment;
+      }
+
+      return colonne
+          .Select(c => Regex.Replace(c.ToString(), @"\s+", " ").Trim())
+          .ToList();
+    }
+
+    private void NormalizzaDataSpezzataPrimaColonna(List<string> colonne)
+    {
+      if (colonne.Count < 2 || string.IsNullOrWhiteSpace(colonne[0]) || string.IsNullOrWhiteSpace(colonne[1]))
+      {
+        return;
+      }
+
+      Match primaColonna = Regex.Match(colonne[0], @"^(?<giorno>\d{1,2})\s+(?<mese>[A-Za-zÀ-ÿ]+)\s+(?<annoParziale>\d{2})$");
+      Match secondaColonna = Regex.Match(colonne[1], @"^(?<restoAnno>\d{2})(?<resto>.*)$");
+      if (!primaColonna.Success || !secondaColonna.Success)
+      {
+        return;
+      }
+
+      colonne[0] = $"{primaColonna.Groups["giorno"].Value} {primaColonna.Groups["mese"].Value} {primaColonna.Groups["annoParziale"].Value}{secondaColonna.Groups["restoAnno"].Value}";
+      colonne[1] = secondaColonna.Groups["resto"].Value.Trim();
+    }
+
+    private int GetIndiceColonna(float x, float limiteColonna1, float limiteColonna2, float limiteColonna3)
+    {
+      if (x < limiteColonna1)
+      {
+        return 0;
+      }
+
+      if (x < limiteColonna2)
+      {
+        return 1;
+      }
+
+      if (x < limiteColonna3)
+      {
+        return 2;
+      }
+
+      return 3;
+    }
+
+    private bool ContieneDataPrimaColonna(List<string> colonne)
+    {
+      string[] formatiData = { "dd/MM/yyyy", "d/M/yyyy", "dd-MM-yyyy", "d-M-yyyy", "d MMM yyyy", "dd MMM yyyy", "d MMMM yyyy", "dd MMMM yyyy" };
+      if (colonne.Count == 0 || string.IsNullOrWhiteSpace(colonne[0]))
+      {
+        return false;
+      }
+
+      string dataNormalizzata = EstraiDataIniziale(colonne[0]);
+
+      return DateTime.TryParseExact(
+          dataNormalizzata,
+          formatiData,
+          CultureInfo.InvariantCulture,
+          DateTimeStyles.None,
+          out _)
+          || DateTime.TryParseExact(
+              dataNormalizzata,
+              formatiData,
+              new CultureInfo("it-IT"),
+              DateTimeStyles.None,
+              out _);
+    }
+
+    private void AccodaSottorigaAMacroRiga(List<string> macroRigaCorrente, List<string> colonne)
+    {
+      int colonneValorizzate = colonne.Count(c => !string.IsNullOrWhiteSpace(c));
+      if (colonneValorizzate == 1 && !string.IsNullOrWhiteSpace(colonne[0]))
+      {
+        AccodaTestoInColonna(macroRigaCorrente, 2, colonne[0]);
+        return;
+      }
+
+      for (int i = 0; i < Math.Min(4, colonne.Count); i++)
+      {
+        AccodaTestoInColonna(macroRigaCorrente, i, colonne[i]);
+      }
+    }
+
+    private void AccodaTestoInColonna(List<string> colonne, int indiceColonna, string testo)
+    {
+      if (string.IsNullOrWhiteSpace(testo))
+      {
+        return;
+      }
+
+      colonne[indiceColonna] = $"{colonne[indiceColonna]} {testo}".Trim();
+    }
+
+    public class PdfTextFragment
+    {
+      public int Page { get; set; }
+      public string Text { get; set; } = "";
+      public float X { get; set; }
+      public float EndX { get; set; }
+      public float Y { get; set; }
+    }
+
+    private class TextCoordinateExtractionListener : IEventListener
+    {
+      private readonly int pageNumber;
+
+      public TextCoordinateExtractionListener(int pageNumber)
+      {
+        this.pageNumber = pageNumber;
+      }
+
+      public List<PdfTextFragment> Fragments { get; } = new List<PdfTextFragment>();
+
+      public void EventOccurred(IEventData data, EventType type)
+      {
+        if (type != EventType.RENDER_TEXT)
+        {
+          return;
+        }
+
+        var renderInfo = (TextRenderInfo)data;
+        foreach (TextRenderInfo characterInfo in renderInfo.GetCharacterRenderInfos())
+        {
+          string text = characterInfo.GetText();
+          if (string.IsNullOrWhiteSpace(text))
+          {
+            continue;
+          }
+
+          LineSegment baseline = characterInfo.GetBaseline();
+          Vector startPoint = baseline.GetStartPoint();
+          Vector endPoint = baseline.GetEndPoint();
+
+          Fragments.Add(new PdfTextFragment
+          {
+            Page = pageNumber,
+            Text = text,
+            X = startPoint.Get(Vector.I1),
+            EndX = endPoint.Get(Vector.I1),
+            Y = startPoint.Get(Vector.I2)
+          });
+        }
+      }
+
+      public ICollection<EventType> GetSupportedEvents()
+      {
+        return new HashSet<EventType> { EventType.RENDER_TEXT };
+      }
+    }
+
     private decimal ParseDecimal(string s)
     {
       if (string.IsNullOrWhiteSpace(s)) return 0;
@@ -569,6 +847,139 @@ namespace BancaParser.Core
         });
       }
       return results;
+    }
+
+    private List<Operazione> EstraiMovimentiFromTrCsv(string fullName)
+    {
+      var results = new List<Operazione>();
+      List<List<string>> rows = ParseCsvRows(fullName);
+      if (rows.Count <= 1)
+      {
+        return results;
+      }
+
+      List<string> header = rows[0];
+      int typeIndex = header.FindIndex(c => c.Equals("type", StringComparison.OrdinalIgnoreCase));
+
+      for (int i = 1; i < rows.Count; i++)
+      {
+        List<string> columns = rows[i];
+        if (columns.Count == 0 || columns.All(string.IsNullOrWhiteSpace))
+        {
+          continue;
+        }
+
+        if (columns.Count <= 16)
+        {
+          continue;
+        }
+
+        decimal importoTemp = ParseDecimal(columns[10].Replace(".", ","));
+        if (importoTemp > 0)
+        {
+          continue;
+        }
+
+        string tipo = typeIndex >= 0 && typeIndex < columns.Count
+            ? TraduciTipoTrCsv(columns[typeIndex])
+            : "";
+
+        results.Add(new Operazione
+        {
+          Data = Convert.ToDateTime(columns[1], CultureInfo.InvariantCulture),
+          Descrizione = columns[17],
+          Tipo = tipo,
+          Importo = importoTemp,
+          IsContabilizzato = false,
+          Banca = TRADEREPUBBLIC
+        });
+      }
+
+      return results;
+    }
+
+    private string TraduciTipoTrCsv(string type)
+    {
+      if (string.IsNullOrWhiteSpace(type))
+      {
+        return "";
+      }
+
+      string normalizedType = type.Trim();
+      return normalizedType.ToUpperInvariant() switch
+      {
+        "CARD_TRANSACTION" => "Transazione con carta",
+        "CARD_SUCCESSFUL" => "Transazione con carta",
+        "CARD_REFUND" => "Rimborso carta",
+        "CASH_INTEREST" => "Pagamento degli interessi",
+        "INTEREST" => "Interessi",
+        "INCOMING_TRANSFER" => "Bonifico in entrata",
+        "OUTGOING_TRANSFER" => "Bonifico in uscita",
+        "ORDER_EXECUTED" => "Commercio azioni",
+        "SAVINGS_PLAN_EXECUTED" => "Piano di accumulo",
+        "DIRECT_DEBIT" => "Addebito diretto",
+        "DIVIDEND" => "Dividendo",
+        "TAX" => "Imposta",
+        "BENEFIT" => "Premio",
+        "ROUND_UP" => "Arrotondamento",
+        _ => CapitalizeWords(normalizedType.Replace("_", " "))
+      };
+    }
+
+    private List<List<string>> ParseCsvRows(string fullName)
+    {
+      var rows = new List<List<string>>();
+      var row = new List<string>();
+      var field = new StringBuilder();
+      bool inQuotes = false;
+      string text = File.ReadAllText(fullName);
+
+      for (int i = 0; i < text.Length; i++)
+      {
+        char current = text[i];
+
+        if (current == '"')
+        {
+          if (inQuotes && i + 1 < text.Length && text[i + 1] == '"')
+          {
+            field.Append('"');
+            i++;
+          }
+          else
+          {
+            inQuotes = !inQuotes;
+          }
+        }
+        else if (current == ',' && !inQuotes)
+        {
+          row.Add(field.ToString());
+          field.Clear();
+        }
+        else if ((current == '\r' || current == '\n') && !inQuotes)
+        {
+          if (current == '\r' && i + 1 < text.Length && text[i + 1] == '\n')
+          {
+            i++;
+          }
+
+          row.Add(field.ToString());
+          field.Clear();
+          rows.Add(row);
+          row = new List<string>();
+        }
+        else
+        {
+          field.Append(current);
+        }
+      }
+
+      if (field.Length > 0 || row.Count > 0)
+      {
+        row.Add(field.ToString());
+        rows.Add(row);
+      }
+
+      return rows;
     }
 
     // mesi italiani
