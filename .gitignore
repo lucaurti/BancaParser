@@ -16,6 +16,9 @@
 # Visual Studio Code
 .vscode/
 
+# macOS
+.DS_Store
+
 # NuGet
 *.nupkg
 *.snupkg
