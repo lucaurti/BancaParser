@@ -24,10 +24,18 @@ class Program
     files.AddRange(Directory.GetFiles(appConfig.folderFiles, "*.xlsx"));
     files.AddRange(Directory.GetFiles(appConfig.folderFiles, "*.csv"));
 
-    List<Operazione> operazioni = pdfMovimentiExtractor.RecuperaOperazioni(files);
-    List<Operazione> operazioniDefinitive = pdfMovimentiExtractor.LavoraOperazioni(appConfig.Descrizioni, operazioni);
+    RecuperaOperazioniResult recuperaOperazioniResult = pdfMovimentiExtractor.RecuperaOperazioni(files);
+    List<Operazione> operazioniDefinitive = pdfMovimentiExtractor.LavoraOperazioni(appConfig.Descrizioni, recuperaOperazioniResult.Operazioni);
     pdfMovimentiExtractor.ExportToCsv(appConfig.OutputOperazioni, operazioniDefinitive);
     Console.WriteLine($"File CSV creato - {appConfig.OutputOperazioni}");
+    if (recuperaOperazioniResult.Errori.Any())
+    {
+      Console.WriteLine("Alcuni file non sono stati elaborati:");
+      foreach (var errore in recuperaOperazioniResult.Errori)
+      {
+        Console.WriteLine($"- {errore.File}: {errore.Errore}");
+      }
+    }
     Console.ReadLine();
   }
 }

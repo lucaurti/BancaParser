@@ -10,6 +10,18 @@ using System.Text.RegularExpressions;
 
 namespace BancaParser.Core
 {
+  public class RecuperaOperazioniResult
+  {
+    public List<Operazione> Operazioni { get; set; } = new List<Operazione>();
+    public List<FileElaborazioneErrore> Errori { get; set; } = new List<FileElaborazioneErrore>();
+  }
+
+  public class FileElaborazioneErrore
+  {
+    public string File { get; set; } = "";
+    public string Errore { get; set; } = "";
+  }
+
   public class PdfMovimentiExtractor
   {
     private const string SPLITWISE = "Splitwise";
@@ -19,48 +31,59 @@ namespace BancaParser.Core
     private const string TRADEREPUBBLIC = "Trade Republic";
     private const string ING = "ING";
 
-    public List<Operazione> RecuperaOperazioni(List<string> files)
+    public RecuperaOperazioniResult RecuperaOperazioni(List<string> files)
     {
-      List<Operazione> operazioni = new List<Operazione>();
+      RecuperaOperazioniResult result = new RecuperaOperazioniResult();
       foreach (var file in files)
       {
         FileInfo fileInfo = new FileInfo(file);
-        switch (fileInfo.Name.Replace(fileInfo.Extension, "").ToLower())
+        try
         {
-          case string s when s.StartsWith("tr"):
-          case string s1 when s1.StartsWith("trade_repubblic"):
-          case string s2 when s2.StartsWith("traderepubblic"):
-            if (fileInfo.Extension.Equals(".csv", StringComparison.OrdinalIgnoreCase))
-            {
-              operazioni.AddRange(EstraiMovimentiFromTrCsv(fileInfo.FullName));
-            }
-            else
-            {
-              operazioni.AddRange(EstraiMovimentiFromTr(fileInfo.FullName));
-            }
-            break;
-          case string s when s.StartsWith("ing"):
-          case string s1 when s1.StartsWith("ing direct"):
-          case string s2 when s2.StartsWith("ingdirect"):
-          case string s3 when s3.StartsWith("ing_direct"):
-            //operazioni.AddRange(EstraiMovimentiFromIng(fileInfo.FullName));
-            operazioni.AddRange(EstraiGrigliaPdfConRigheMultiple(fileInfo.FullName));
-            break;
-          case string s when s.StartsWith("bpm"):
-            operazioni.AddRange(EstraiMovimentiFromBpm(fileInfo.FullName));
-            break;
-          case string s when s.StartsWith("hype"):
-            operazioni.AddRange(EstraiMovimentiFromHype(fileInfo.FullName));
-            break;
-          case string s when s.StartsWith("splitwise"):
-            operazioni.AddRange(EstraiMovimentiFromSplitwise(fileInfo.FullName));
-            break;
-          case string s when s.StartsWith("satispay"):
-            operazioni.AddRange(EstraiMovimentiFromSatispay(fileInfo.FullName));
-            break;
+          switch (fileInfo.Name.Replace(fileInfo.Extension, "").ToLower())
+          {
+            case string s when s.StartsWith("tr"):
+            case string s1 when s1.StartsWith("trade_repubblic"):
+            case string s2 when s2.StartsWith("traderepubblic"):
+              if (fileInfo.Extension.Equals(".csv", StringComparison.OrdinalIgnoreCase))
+              {
+                result.Operazioni.AddRange(EstraiMovimentiFromTrCsv(fileInfo.FullName));
+              }
+              else
+              {
+                result.Operazioni.AddRange(EstraiMovimentiFromTr(fileInfo.FullName));
+              }
+              break;
+            case string s when s.StartsWith("ing"):
+            case string s1 when s1.StartsWith("ing direct"):
+            case string s2 when s2.StartsWith("ingdirect"):
+            case string s3 when s3.StartsWith("ing_direct"):
+              //operazioni.AddRange(EstraiMovimentiFromIng(fileInfo.FullName));
+              result.Operazioni.AddRange(EstraiGrigliaPdfConRigheMultiple(fileInfo.FullName));
+              break;
+            case string s when s.StartsWith("bpm"):
+              result.Operazioni.AddRange(EstraiMovimentiFromBpm(fileInfo.FullName));
+              break;
+            case string s when s.StartsWith("hype"):
+              result.Operazioni.AddRange(EstraiMovimentiFromHype(fileInfo.FullName));
+              break;
+            case string s when s.StartsWith("splitwise"):
+              result.Operazioni.AddRange(EstraiMovimentiFromSplitwise(fileInfo.FullName));
+              break;
+            case string s when s.StartsWith("satispay"):
+              result.Operazioni.AddRange(EstraiMovimentiFromSatispay(fileInfo.FullName));
+              break;
+          }
+        }
+        catch (Exception ex)
+        {
+          result.Errori.Add(new FileElaborazioneErrore
+          {
+            File = fileInfo.Name,
+            Errore = ex.Message
+          });
         }
       }
-      return operazioni;
+      return result;
     }
 
     private IEnumerable<Operazione> EstraiMovimentiFromSatispay(string fullName)
@@ -68,28 +91,16 @@ namespace BancaParser.Core
       using (var workbook = new XLWorkbook(fullName))
       {
         var worksheet = workbook.Worksheet(1);
-        List<List<string>> list = new List<List<string>>();
-        foreach (var row in worksheet.RowsUsed())
-        {
-          var values = row.Cells().Select(c =>
-          {
-            string v = c.GetValue<string>();
-            if (v.Contains(",") || v.Contains("\""))
-              v = $"\"{v.Replace("\"", "\"\"")}\"";
-            return v;
-          }).ToList();
-          list.Add(values);
-        }
         var results = new List<Operazione>();
-        for (int i = 1; i < list.Count; i++)
+        foreach (var row in worksheet.RowsUsed().Skip(1))
         {
-          decimal importoTemp = ParseDecimal(list[i][3]);
+          decimal importoTemp = ParseDecimal(row.Cell(4).GetValue<string>());
           if (importoTemp < 0)
           {
             results.Add(new Operazione
             {
-              Data = DateTime.ParseExact(list[i][0], "dd/MM/yyyy HH:mm:ss", CultureInfo.InvariantCulture),
-              Descrizione = list[i][1],
+              Data = ParseSatispayDate(row.Cell(1)),
+              Descrizione = row.Cell(2).GetValue<string>(),
               Tipo = "",
               Importo = importoTemp,
               IsContabilizzato = true,
@@ -99,6 +110,49 @@ namespace BancaParser.Core
         }
         return results;
       }
+    }
+
+    private DateTime ParseSatispayDate(IXLCell cell)
+    {
+      if (cell.TryGetValue<DateTime>(out var date))
+      {
+        return date;
+      }
+
+      return ParseSatispayDate(cell.GetValue<string>());
+    }
+
+    private DateTime ParseSatispayDate(string value)
+    {
+      value = value.Trim().Trim('"');
+
+      string[] formatiData =
+      {
+        "dd/MM/yyyy HH:mm:ss",
+        "d/M/yyyy H:mm:ss",
+        "MM/dd/yyyy HH:mm:ss",
+        "M/d/yyyy H:mm:ss",
+        "dd/MM/yyyy",
+        "d/M/yyyy",
+        "MM/dd/yyyy",
+        "M/d/yyyy",
+        "yyyy-MM-dd HH:mm:ss",
+        "yyyy-MM-dd"
+      };
+
+      if (DateTime.TryParseExact(value, formatiData, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate))
+      {
+        return parsedDate;
+      }
+
+      if (DateTime.TryParse(value, new CultureInfo("it-IT"), DateTimeStyles.None, out parsedDate)
+          || DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsedDate)
+          || DateTime.TryParse(value, new CultureInfo("en-US"), DateTimeStyles.None, out parsedDate))
+      {
+        return parsedDate;
+      }
+
+      throw new FormatException($"Formato data Satispay non riconosciuto: '{value}'.");
     }
 
     public void ExportToCsv(string outputOperazioni, List<Operazione> operazioniDefinitive)

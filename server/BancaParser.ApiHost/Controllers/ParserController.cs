@@ -26,11 +26,17 @@ namespace BancaParser.Host.Controllers
         files.AddRange(Directory.GetFiles(Path.Combine(basePath, _configuration.RelativeFolderInputFiles), "*.xlsx"));
         files.AddRange(Directory.GetFiles(Path.Combine(basePath, _configuration.RelativeFolderInputFiles), "*.csv"));
 
-        List<Operazione> operazioni = pdfMovimentiExtractor.RecuperaOperazioni(files);
-        List<Operazione> operazioniDefinitive = pdfMovimentiExtractor.LavoraOperazioni(_configuration.Descrizioni, operazioni);
+        RecuperaOperazioniResult recuperaOperazioniResult = pdfMovimentiExtractor.RecuperaOperazioni(files);
+        List<Operazione> operazioniDefinitive = pdfMovimentiExtractor.LavoraOperazioni(_configuration.Descrizioni, recuperaOperazioniResult.Operazioni);
         string pathCsv = $"{basePath}{_configuration.RelativeFolderOutputFiles}";
         pdfMovimentiExtractor.ExportToCsv(pathCsv, operazioniDefinitive);
-        return Ok();
+        return Ok(new
+        {
+          message = recuperaOperazioniResult.Errori.Any()
+            ? "Resoconto generato con alcuni file in errore."
+            : "Resoconto generato correttamente.",
+          errori = recuperaOperazioniResult.Errori
+        });
       }
       catch (Exception ex)
       {
