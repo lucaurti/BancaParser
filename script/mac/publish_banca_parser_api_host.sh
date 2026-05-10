@@ -50,22 +50,25 @@ bzip2 banca_parser_business_apihost_container_image.tar
 echo "effettuo l'upload del file"
 set RETRIES=5
 set COUNT=0
+while true; do
+  COUNT=$((COUNT + 1))
+  echo "Tentativo $COUNT..."
 
-:retry
-set /A COUNT+=1
-echo Tentativo %COUNT%...
-scp /Users/lucaurti/Develop/fileBrowser/banca_parser_business_apihost_container_image.tar.bz2 luclash@luclash-server:/home/luclash/upload/banca_parser_business_apihost_container_image.tar.bz2
-if %ERRORLEVEL% EQU 0 goto :done
-if %COUNT% GEQ %RETRIES% goto :fail
-echo "SCP Fallito". Riprovo tra 5 secondi...
-timeout /t 5 > nul
-goto :retry
+  scp /Users/lucaurti/Develop/fileBrowser/tar/banca_parser_business_apihost_container_image.tar.bz2 luclash@luclash-server:/home/luclash/upload/banca_parser_business_apihost_container_image.tar.bz2
 
-:fail
-echo Operazione fallita dopo %RETRIES% tentativi.
-exit /b 1
+  if [ $? -eq 0 ]; then
+    break
+  fi
 
-:done
+  if [ "$COUNT" -ge "$RETRIES" ]; then
+    echo "Operazione fallita dopo $RETRIES tentativi."
+    exit 1
+  fi
+
+  echo "SCP fallito. Riprovo tra 5 secondi..."
+  sleep 5
+done
+
 echo "eseguo lo script per deployare il container"
 ssh -tt luclash@luclash-server "sudo bash -c 'dos2unix /home/luclash/docker/banca-parser-app/script/*.sh && bash /home/luclash/docker/banca-parser-app/script/banca_parser_business_load_run.sh'"
 

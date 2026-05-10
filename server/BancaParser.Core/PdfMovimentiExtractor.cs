@@ -94,7 +94,7 @@ namespace BancaParser.Core
         var results = new List<Operazione>();
         foreach (var row in worksheet.RowsUsed().Skip(1))
         {
-          decimal importoTemp = ParseDecimal(row.Cell(4).GetValue<string>());
+          decimal importoTemp = ParseExcelDecimal(row.Cell(4));
           if (importoTemp < 0)
           {
             results.Add(new Operazione
@@ -155,6 +155,64 @@ namespace BancaParser.Core
       throw new FormatException($"Formato data Satispay non riconosciuto: '{value}'.");
     }
 
+    private decimal ParseExcelDecimal(IXLCell cell)
+    {
+      if (cell.TryGetValue<decimal>(out var value))
+      {
+        return value;
+      }
+
+      return ParseExcelDecimal(cell.GetValue<string>());
+    }
+
+    private decimal ParseExcelDecimal(string value)
+    {
+      if (string.IsNullOrWhiteSpace(value))
+      {
+        return 0;
+      }
+
+      string normalizedValue = value
+        .Trim()
+        .Trim('"')
+        .Replace("€", "")
+        .Replace(" ", "")
+        .Replace("\u00A0", "");
+
+      int lastCommaIndex = normalizedValue.LastIndexOf(',');
+      int lastDotIndex = normalizedValue.LastIndexOf('.');
+
+      if (lastCommaIndex >= 0 && lastDotIndex >= 0)
+      {
+        normalizedValue = lastCommaIndex > lastDotIndex
+          ? normalizedValue.Replace(".", "").Replace(",", ".")
+          : normalizedValue.Replace(",", "");
+      }
+      else if (lastCommaIndex >= 0)
+      {
+        normalizedValue = IsThousandsSeparator(normalizedValue, lastCommaIndex)
+          ? normalizedValue.Replace(",", "")
+          : normalizedValue.Replace(",", ".");
+      }
+      else if (lastDotIndex >= 0 && IsThousandsSeparator(normalizedValue, lastDotIndex))
+      {
+        normalizedValue = normalizedValue.Replace(".", "");
+      }
+
+      if (decimal.TryParse(normalizedValue, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedValue))
+      {
+        return parsedValue;
+      }
+
+      throw new FormatException($"Formato importo Excel non riconosciuto: '{value}'.");
+    }
+
+    private bool IsThousandsSeparator(string value, int separatorIndex)
+    {
+      int decimalDigits = value.Length - separatorIndex - 1;
+      return decimalDigits == 3;
+    }
+
     public void ExportToCsv(string outputOperazioni, List<Operazione> operazioniDefinitive)
     {
       // CSV operazioni
@@ -197,7 +255,7 @@ namespace BancaParser.Core
         newOperazione.Descrizione = CapitalizeWords(op.Descrizione);
         foreach (var item in descrizioniInConfig)
         {
-          if (op.Descrizione.ToLower().Contains(item.Key.ToLower()))
+          if (op.Descrizione.ToLower().Trim().Contains(item.Key.ToLower().Trim()))
           {
             newOperazione.Descrizione = CapitalizeWords(item.Value);
             break;
@@ -838,7 +896,7 @@ namespace BancaParser.Core
         var results = new List<Operazione>();
         for (int i = 1; i < list.Count; i++)
         {
-          decimal importoTemp = ParseDecimal(list[i][2]);
+          decimal importoTemp = ParseExcelDecimal(list[i][2]);
           if (importoTemp < 0)
           {
             results.Add(new Operazione
