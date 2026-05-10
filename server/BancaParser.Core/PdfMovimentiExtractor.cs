@@ -103,7 +103,7 @@ namespace BancaParser.Core
               Descrizione = row.Cell(2).GetValue<string>(),
               Tipo = "",
               Importo = importoTemp,
-              IsContabilizzato = true,
+              IsContabilizzato = false,
               Banca = SATISPAY
             });
           }
