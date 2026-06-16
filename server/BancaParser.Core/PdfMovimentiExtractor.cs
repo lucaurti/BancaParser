@@ -605,17 +605,33 @@ namespace BancaParser.Core
     {
       var macroRighe = new List<List<string>>();
       List<string>? macroRigaCorrente = null;
+      List<string>? macroRigaInAttesaAnno = null;
       List<List<PdfTextFragment>> righeFisiche = EstraiRigheFisichePdf(pdfPath);
 
       foreach (List<PdfTextFragment> rigaFisica in righeFisiche)
       {
         List<string> colonne = EstraiQuattroColonne(rigaFisica, limiteColonna1, limiteColonna2, limiteColonna3);
         NormalizzaDataSpezzataPrimaColonna(colonne);
+        if (RigaFisicaDaIgnorare(colonne))
+        {
+          continue;
+        }
 
         if (ContieneDataPrimaColonna(colonne))
         {
+          macroRigaInAttesaAnno = null;
           macroRigaCorrente = colonne;
           macroRighe.Add(macroRigaCorrente);
+        }
+        else if (ContieneGiornoMesePrimaColonna(colonne))
+        {
+          macroRigaInAttesaAnno = colonne;
+        }
+        else if (macroRigaInAttesaAnno != null && CompletaMacroRigaConAnno(macroRigaInAttesaAnno, colonne))
+        {
+          macroRigaCorrente = macroRigaInAttesaAnno;
+          macroRighe.Add(macroRigaCorrente);
+          macroRigaInAttesaAnno = null;
         }
         else if (macroRigaCorrente != null)
         {
@@ -641,11 +657,41 @@ namespace BancaParser.Core
 
     private string EstraiDataIniziale(string testo)
     {
-      Match match = Regex.Match(
-          testo.Trim(),
-          @"^(\d{1,2}[/-]\d{1,2}[/-]\d{4}|\d{1,2}\s+[A-Za-zÀ-ÿ]+\s+\d{4})");
+      if (TryEstraiDataIniziale(testo, out string data))
+      {
+        return data;
+      }
 
-      return match.Success ? match.Groups[1].Value.Trim() : testo.Trim();
+      return testo.Trim();
+    }
+
+    private bool TryEstraiDataIniziale(string testo, out string data)
+    {
+      data = "";
+      string testoNormalizzato = testo.Trim();
+
+      Match dataNumerica = Regex.Match(testoNormalizzato, @"^\d{1,2}[/-]\d{1,2}[/-]\d{4}");
+      if (dataNumerica.Success)
+      {
+        data = dataNumerica.Value.Trim();
+        return true;
+      }
+
+      foreach (string mese in Months.OrderByDescending(m => m.Length))
+      {
+        Match dataTestuale = Regex.Match(
+            testoNormalizzato,
+            $@"^(?<giorno>\d{{1,2}})\s*{Regex.Escape(mese)}\s*(?<anno>\d{{4}})",
+            RegexOptions.IgnoreCase);
+
+        if (dataTestuale.Success)
+        {
+          data = $"{dataTestuale.Groups["giorno"].Value} {mese} {dataTestuale.Groups["anno"].Value}";
+          return true;
+        }
+      }
+
+      return false;
     }
 
     public List<PdfTextFragment> EstraiFrammentiPdfConCoordinate(string pdfPath)
@@ -786,6 +832,106 @@ namespace BancaParser.Core
               out _);
     }
 
+    private bool RigaFisicaDaIgnorare(List<string> colonne)
+    {
+      string testo = string.Join(" ", colonne)
+          .Trim();
+      if (string.IsNullOrWhiteSpace(testo))
+      {
+        return true;
+      }
+
+      string testoNormalizzato = RimuoviDuplicatiConsecutivi(testo)
+          .ToLowerInvariant();
+
+      return testoNormalizzato.Contains("data contabile")
+          || testoNormalizzato.Contains("tipo transazione")
+          || testoNormalizzato == "tipo"
+          || testoNormalizzato == "transazione"
+          || (testoNormalizzato.Contains("descrizione") && testoNormalizzato.Contains("importo"));
+    }
+
+    private string RimuoviDuplicatiConsecutivi(string testo)
+    {
+      var sb = new StringBuilder(testo.Length);
+      char? ultimoCarattere = null;
+
+      foreach (char carattere in testo)
+      {
+        if (ultimoCarattere == carattere)
+        {
+          continue;
+        }
+
+        sb.Append(carattere);
+        ultimoCarattere = carattere;
+      }
+
+      return sb.ToString();
+    }
+
+    private bool ContieneGiornoMesePrimaColonna(List<string> colonne)
+    {
+      return TryEstraiGiornoMesePrimaColonna(colonne, out _);
+    }
+
+    private bool TryEstraiGiornoMesePrimaColonna(List<string> colonne, out string giornoMese)
+    {
+      giornoMese = "";
+      if (colonne.Count == 0 || string.IsNullOrWhiteSpace(colonne[0]))
+      {
+        return false;
+      }
+
+      string testo = colonne[0].Trim();
+      foreach (string mese in Months.OrderByDescending(m => m.Length))
+      {
+        Match match = Regex.Match(
+            testo,
+            $@"^(?<giorno>\d{{1,2}})\s*{Regex.Escape(mese)}",
+            RegexOptions.IgnoreCase);
+
+        if (match.Success)
+        {
+          giornoMese = $"{match.Groups["giorno"].Value} {mese}";
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    private bool CompletaMacroRigaConAnno(List<string> macroRigaInAttesaAnno, List<string> colonne)
+    {
+      if (!TryEstraiGiornoMesePrimaColonna(macroRigaInAttesaAnno, out string giornoMese)
+          || colonne.Count == 0
+          || string.IsNullOrWhiteSpace(colonne[0]))
+      {
+        return false;
+      }
+
+      Match anno = Regex.Match(colonne[0].Trim(), @"^(?<anno>\d{4})(?<resto>.*)$");
+      if (!anno.Success)
+      {
+        return false;
+      }
+
+      macroRigaInAttesaAnno[0] = $"{giornoMese} {anno.Groups["anno"].Value}";
+
+      string restoPrimaColonna = anno.Groups["resto"].Value.Trim();
+      if (!string.IsNullOrWhiteSpace(restoPrimaColonna))
+      {
+        AccodaTestoInColonna(macroRigaInAttesaAnno, 1, restoPrimaColonna);
+      }
+
+      for (int i = 1; i < Math.Min(4, colonne.Count); i++)
+      {
+        AccodaTestoInColonna(macroRigaInAttesaAnno, i, colonne[i]);
+      }
+
+      return true;
+    }
+
     private void AccodaSottorigaAMacroRiga(List<string> macroRigaCorrente, List<string> colonne)
     {
       int colonneValorizzate = colonne.Count(c => !string.IsNullOrWhiteSpace(c));
@@ -871,9 +1017,21 @@ namespace BancaParser.Core
     private decimal ParseDecimal(string s)
     {
       if (string.IsNullOrWhiteSpace(s)) return 0;
-      s = s.Replace(".", "").Replace(",", ".").Replace("\"", "");
-      decimal dd = decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d) ? d : 0;
-      return dd;
+
+      Match importo = Regex.Match(s, @"[-+]?\d{1,3}(?:\.\d{3})*,\d{2}|[-+]?\d+(?:[,.]\d+)?");
+      if (importo.Success)
+      {
+        s = importo.Value;
+      }
+
+      try
+      {
+        return ParseExcelDecimal(s);
+      }
+      catch (FormatException)
+      {
+        return 0;
+      }
     }
 
     private List<Operazione> EstraiMovimentiFromBpm(string fullName)
