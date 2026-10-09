@@ -611,6 +611,7 @@ namespace BancaParser.Core
       foreach (List<PdfTextFragment> rigaFisica in righeFisiche)
       {
         List<string> colonne = EstraiQuattroColonne(rigaFisica, limiteColonna1, limiteColonna2, limiteColonna3);
+        RicomponiDataTraColonne(colonne);
         NormalizzaDataSpezzataPrimaColonna(colonne);
         if (RigaFisicaDaIgnorare(colonne))
         {
@@ -632,6 +633,10 @@ namespace BancaParser.Core
           macroRigaCorrente = macroRigaInAttesaAnno;
           macroRighe.Add(macroRigaCorrente);
           macroRigaInAttesaAnno = null;
+        }
+        else if (macroRigaInAttesaAnno != null)
+        {
+          AccodaSottorigaAMacroRiga(macroRigaInAttesaAnno, colonne);
         }
         else if (macroRigaCorrente != null)
         {
@@ -768,6 +773,38 @@ namespace BancaParser.Core
       return colonne
           .Select(c => Regex.Replace(c.ToString(), @"\s+", " ").Trim())
           .ToList();
+    }
+
+    private void RicomponiDataTraColonne(List<string> colonne)
+    {
+      if (colonne.Count < 2 || string.IsNullOrWhiteSpace(colonne[0]))
+      {
+        return;
+      }
+
+      // La suddivisione per X può tagliare qualsiasi punto della data,
+      // compreso il mese. Ricomponiamo solo il prefisso riconosciuto,
+      // lasciando il resto del testo nelle colonne originali.
+      string testo = string.Concat(colonne);
+      string mesi = string.Join("|", Months.OrderByDescending(m => m.Length).Select(Regex.Escape));
+      Match data = Regex.Match(testo,
+          $@"^(?:\d{{1,2}}[/-]\d{{1,2}}[/-]\d{{4}}|\d{{1,2}}\s*(?:{mesi})(?:\s*\d{{4}})?)",
+          RegexOptions.IgnoreCase);
+
+      if (!data.Success || data.Length <= colonne[0].Length)
+      {
+        return;
+      }
+
+      int caratteriDaRimuovere = data.Length;
+      for (int i = 0; i < colonne.Count && caratteriDaRimuovere > 0; i++)
+      {
+        int lunghezza = Math.Min(caratteriDaRimuovere, colonne[i].Length);
+        colonne[i] = colonne[i].Substring(lunghezza).TrimStart();
+        caratteriDaRimuovere -= lunghezza;
+      }
+
+      colonne[0] = EstraiDataIniziale(data.Value);
     }
 
     private void NormalizzaDataSpezzataPrimaColonna(List<string> colonne)
@@ -1096,22 +1133,51 @@ namespace BancaParser.Core
     private List<Operazione> EstraiMovimentiFromSplitwise(string fullName)
     {
       var results = new List<Operazione>();
-      List<string> rows = File.ReadAllLines(fullName).ToList();
+      List<List<string>> rows = ParseCsvRows(fullName);
+      rows = rows.Where(row => row.Any(value => !string.IsNullOrWhiteSpace(value))).ToList();
+      if (rows.Count == 0)
+      {
+        return results;
+      }
+
+      List<string> header = rows[0].Select(value => value.Trim().TrimStart('\uFEFF')).ToList();
+      int Colonna(string nome)
+      {
+        int indice = header.FindIndex(value => value.Equals(nome, StringComparison.OrdinalIgnoreCase));
+        if (indice < 0)
+        {
+          throw new FormatException($"Colonna Splitwise mancante: '{nome}'.");
+        }
+        return indice;
+      }
+
+      int dataIndex = Colonna("Data");
+      int descrizioneIndex = Colonna("Descrizione");
+      int costoIndex = Colonna("Costo");
+      int rossellaIndex = Colonna("Rossella Altieri");
+      int lucaIndex = Colonna("Luca Urti");
+      int ultimoIndice = new[] { dataIndex, descrizioneIndex, costoIndex, rossellaIndex, lucaIndex }.Max();
+
       for (int i = 1; i < rows.Count; i++)
       {
-        if (string.IsNullOrWhiteSpace(rows[i]))
+        List<string> columns = rows[i];
+        if (columns.Count <= ultimoIndice)
+        {
+          throw new FormatException($"Riga Splitwise {i + 1}: numero di colonne insufficiente.");
+        }
+
+        if (columns[descrizioneIndex].Trim().Equals("Bilancio totale", StringComparison.OrdinalIgnoreCase))
         {
           continue;
         }
-        List<string> columns = rows[i].Split(",").ToList();
         results.Add(new Operazione
         {
-          Data = Convert.ToDateTime(columns[0]),
-          Descrizione = columns[1],
+          Data = DateTime.ParseExact(columns[dataIndex].Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture),
+          Descrizione = columns[descrizioneIndex],
           Tipo = "",
-          Importo = ParseDecimal(columns[3].Replace(".", ",")),
-          ImportoRossella = ParseDecimal(columns[6].Replace(".", ",")),
-          ImportoLuca = ParseDecimal(columns[5].Replace(".", ",")),
+          Importo = ParseExcelDecimal(columns[costoIndex]),
+          ImportoRossella = ParseExcelDecimal(columns[rossellaIndex]),
+          ImportoLuca = ParseExcelDecimal(columns[lucaIndex]),
           IsContabilizzato = false,
           Banca = SPLITWISE
         });
