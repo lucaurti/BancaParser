@@ -7,6 +7,8 @@ using iText.Kernel.Pdf.Canvas.Parser.Listener;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Text.Json;
+using Path = System.IO.Path;
 
 namespace BancaParser.Core
 {
@@ -57,8 +59,9 @@ namespace BancaParser.Core
             case string s1 when s1.StartsWith("ing direct"):
             case string s2 when s2.StartsWith("ingdirect"):
             case string s3 when s3.StartsWith("ing_direct"):
-              //operazioni.AddRange(EstraiMovimentiFromIng(fileInfo.FullName));
-              result.Operazioni.AddRange(EstraiGrigliaPdfConRigheMultiple(fileInfo.FullName));
+              result.Operazioni.AddRange(fileInfo.Extension.Equals(".csv", StringComparison.OrdinalIgnoreCase)
+                ? EstraiMovimentiFromIngCsv(fileInfo.FullName)
+                : EstraiGrigliaPdfConRigheMultiple(fileInfo.FullName));
               break;
             case string s when s.StartsWith("bpm"):
               result.Operazioni.AddRange(EstraiMovimentiFromBpm(fileInfo.FullName));
@@ -213,7 +216,8 @@ namespace BancaParser.Core
       return decimalDigits == 3;
     }
 
-    public void ExportToCsv(string outputOperazioni, List<Operazione> operazioniDefinitive)
+    public void ExportToCsv(string outputOperazioni, List<Operazione> operazioniDefinitive,
+      Dictionary<string, string>? descrizioniNonCodificate = null)
     {
       // CSV operazioni
       using (var sw = new StreamWriter(outputOperazioni))
@@ -224,9 +228,17 @@ namespace BancaParser.Core
           sw.WriteLine($"{op.ToString()}");
         }
       }
+      if (descrizioniNonCodificate != null)
+      {
+        string outputDescrizioni = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(outputOperazioni))!,
+          Path.GetFileNameWithoutExtension(outputOperazioni) + ".non-codificate.json");
+        File.WriteAllText(outputDescrizioni, JsonSerializer.Serialize(
+          new { Descrizioni = descrizioniNonCodificate }, new JsonSerializerOptions { WriteIndented = true }));
+      }
     }
 
-    public List<Operazione> LavoraOperazioni(Dictionary<string, string> descrizioniInConfig, List<Operazione> operazioni)
+    public List<Operazione> LavoraOperazioni(Dictionary<string, string> descrizioniInConfig, List<Operazione> operazioni,
+      Dictionary<string, string>? descrizioniNonCodificate = null)
     {
       var operazioniDefinitive = new List<Operazione>();
       foreach (var op in operazioni)
@@ -236,6 +248,7 @@ namespace BancaParser.Core
         newOperazione.Tipo = op.Tipo;
         newOperazione.Importo = Math.Abs(op.Importo);
         newOperazione.Banca = op.Banca;
+        newOperazione.IsContabilizzato = op.IsContabilizzato;
         if (newOperazione.Banca == SPLITWISE)
         {
           newOperazione.ImportoRossella = op.ImportoRossella;
@@ -253,13 +266,19 @@ namespace BancaParser.Core
           newOperazione.ImportoLuca = 0;
         }
         newOperazione.Descrizione = CapitalizeWords(op.Descrizione);
+        bool codificata = false;
         foreach (var item in descrizioniInConfig)
         {
           if (op.Descrizione.ToLower().Trim().Contains(item.Key.ToLower().Trim()))
           {
             newOperazione.Descrizione = CapitalizeWords(item.Value);
+            codificata = true;
             break;
           }
+        }
+        if (!codificata && !string.IsNullOrWhiteSpace(op.Descrizione))
+        {
+          descrizioniNonCodificate?.TryAdd(op.Descrizione.Trim(), "");
         }
         operazioniDefinitive.Add(newOperazione);
       }
@@ -1196,6 +1215,7 @@ namespace BancaParser.Core
 
       List<string> header = rows[0];
       int typeIndex = header.FindIndex(c => c.Equals("type", StringComparison.OrdinalIgnoreCase));
+      int taxIndex = header.FindIndex(c => c.Equals("tax", StringComparison.OrdinalIgnoreCase));
 
       for (int i = 1; i < rows.Count; i++)
       {
@@ -1210,7 +1230,15 @@ namespace BancaParser.Core
           continue;
         }
 
-        decimal importoTemp = ParseDecimal(columns[10].Replace(".", ","));
+        bool isTaxOptimization = typeIndex >= 0 && typeIndex < columns.Count
+            && columns[typeIndex].Trim().Equals("Tax_optimization", StringComparison.OrdinalIgnoreCase);
+        int importoIndex = isTaxOptimization ? taxIndex : 10;
+        if (importoIndex < 0 || importoIndex >= columns.Count)
+        {
+          throw new FormatException($"Riga Trade Republic {i + 1}: colonna 'tax' mancante.");
+        }
+
+        decimal importoTemp = ParseDecimal(columns[importoIndex].Replace(".", ","));
         if (importoTemp > 0)
         {
           continue;
@@ -1262,7 +1290,54 @@ namespace BancaParser.Core
       };
     }
 
-    private List<List<string>> ParseCsvRows(string fullName)
+    private List<Operazione> EstraiMovimentiFromIngCsv(string fullName)
+    {
+      var results = new List<Operazione>();
+      var rows = ParseCsvRows(fullName, ';')
+        .Where(row => row.Any(value => !string.IsNullOrWhiteSpace(value))).ToList();
+      if (rows.Count == 0)
+      {
+        return results;
+      }
+
+      var header = rows[0].Select(value => Regex.Replace(value.Trim().TrimStart('\uFEFF'), @"\s+", " ")).ToList();
+      int Colonna(string nome)
+      {
+        int index = header.FindIndex(value => value.Equals(nome, StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+          throw new FormatException($"Colonna ING mancante: '{nome}'.");
+        return index;
+      }
+
+      int dataIndex = Colonna("DATA CONTABILE");
+      int importoIndex = Colonna("USCITE");
+      int descrizioneIndex = Colonna("DESCRIZIONE OPERAZIONE");
+      int ultimoIndice = new[] { dataIndex, importoIndex, descrizioneIndex }.Max();
+      for (int i = 1; i < rows.Count; i++)
+      {
+        var columns = rows[i];
+        if (columns.Count <= ultimoIndice)
+          throw new FormatException($"Riga ING {i + 1}: numero di colonne insufficiente.");
+        decimal importo = ParseExcelDecimal(columns[importoIndex]);
+        if (importo == 0)
+          continue;
+
+        results.Add(new Operazione
+        {
+          Data = DateTime.ParseExact(columns[dataIndex].Trim(),
+            new[] { "dd/MM/yyyy", "d/M/yyyy", "dd-MM-yyyy", "d-M-yyyy", "yyyy-MM-dd" },
+            CultureInfo.InvariantCulture, DateTimeStyles.None),
+          Descrizione = columns[descrizioneIndex],
+          Tipo = "",
+          Importo = importo,
+          IsContabilizzato = false,
+          Banca = ING
+        });
+      }
+      return results;
+    }
+
+    private List<List<string>> ParseCsvRows(string fullName, char delimiter = ',')
     {
       var rows = new List<List<string>>();
       var row = new List<string>();
@@ -1286,7 +1361,7 @@ namespace BancaParser.Core
             inQuotes = !inQuotes;
           }
         }
-        else if (current == ',' && !inQuotes)
+        else if (current == delimiter && !inQuotes)
         {
           row.Add(field.ToString());
           field.Clear();

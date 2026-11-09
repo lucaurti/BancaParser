@@ -27,9 +27,10 @@ namespace BancaParser.Host.Controllers
         files.AddRange(Directory.GetFiles(Path.Combine(basePath, _configuration.RelativeFolderInputFiles), "*.csv"));
 
         RecuperaOperazioniResult recuperaOperazioniResult = pdfMovimentiExtractor.RecuperaOperazioni(files);
-        List<Operazione> operazioniDefinitive = pdfMovimentiExtractor.LavoraOperazioni(_configuration.Descrizioni, recuperaOperazioniResult.Operazioni);
+        var nonCodificate = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        List<Operazione> operazioniDefinitive = pdfMovimentiExtractor.LavoraOperazioni(_configuration.Descrizioni, recuperaOperazioniResult.Operazioni, nonCodificate);
         string pathCsv = $"{basePath}{_configuration.RelativeFolderOutputFiles}";
-        pdfMovimentiExtractor.ExportToCsv(pathCsv, operazioniDefinitive);
+        pdfMovimentiExtractor.ExportToCsv(pathCsv, operazioniDefinitive, nonCodificate);
         return Ok(new
         {
           message = recuperaOperazioniResult.Errori.Any()

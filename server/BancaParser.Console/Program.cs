@@ -25,8 +25,9 @@ class Program
     files.AddRange(Directory.GetFiles(appConfig.folderFiles, "*.csv"));
 
     RecuperaOperazioniResult recuperaOperazioniResult = pdfMovimentiExtractor.RecuperaOperazioni(files);
-    List<Operazione> operazioniDefinitive = pdfMovimentiExtractor.LavoraOperazioni(appConfig.Descrizioni, recuperaOperazioniResult.Operazioni);
-    pdfMovimentiExtractor.ExportToCsv(appConfig.OutputOperazioni, operazioniDefinitive);
+    var nonCodificate = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    List<Operazione> operazioniDefinitive = pdfMovimentiExtractor.LavoraOperazioni(appConfig.Descrizioni, recuperaOperazioniResult.Operazioni, nonCodificate);
+    pdfMovimentiExtractor.ExportToCsv(appConfig.OutputOperazioni, operazioniDefinitive, nonCodificate);
     Console.WriteLine($"File CSV creato - {appConfig.OutputOperazioni}");
     if (recuperaOperazioniResult.Errori.Any())
     {
